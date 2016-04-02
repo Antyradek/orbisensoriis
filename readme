@@ -1,1 +1,10 @@
-Hej 
+8. Pierścieniowa sieć czujników.
+
+Realizują: Mateusz Blicharski, Paweł Jankowski, Paweł Szewczyk, Radosław Świątkiewicz.
+
+W pierścieniu połączone są serwer i N czujników. Serwer jest stale aktywny. Czujniki periodycznie budzą się i wykonują pomiar. 
+Każdy czujnik próbuje odebrać komunikat z pomiarami od jednego sąsiada, dodać do niego swój pomiar i wysłać drugiemu sąsiadowi. 
+Czujniki oszczędzają energię, zatem należy minimalizować czas ich pracy i wolumin transmitowanych danych. Sieć ma tolerować 
+pojedyncze uszkodzenie węzła lub połączenia. Należy zaprojektować i wykonać system komunikacji dla tej sieci. Przeanalizować 
+wybór protokołu IPv4 i IPv6. Ponadto należy zaprojektować moduł do Wireshark umożliwiający wyświetlanie i analizę zdefiniowanych 
+komunikatów.
