@@ -1,0 +1,4 @@
+Dodawanie pluginu do wiresharka:
+Na początku pliku /usr/share/wireshark/init.lua dodaj linię: dofile("sciezka_do_pluginu")
+
+Czujniki i server powinnny się komunikować za pomocą portów z zakresu 4000-5000.
