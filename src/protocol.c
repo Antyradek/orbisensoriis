@@ -1,8 +1,21 @@
+/**
+ * protocol.c
+ * Paweł Szewczyk
+ * 2016-04-26
+ */
+
 #include <errno.h>
 #include <arpa/inet.h>
 #include <stdlib.h>
 #include "protocol.h"
 
+/**
+ * @brief pakuje init_msg
+ * @param[in] msg Wiadomość do spakowania
+ * @param[out] dst Bufor wynikowy
+ * @param[in] n Rozmiar bufora dst
+ * @return liczba zapisanych bajtów lub ujemny kod błędu w przypadku błędu
+ */
 static int pack_init_msg(struct init_msg *msg, unsigned char *dst, int n)
 {
 	uint16_t timeout = msg->timeout << 2;
@@ -21,6 +34,12 @@ static int pack_init_msg(struct init_msg *msg, unsigned char *dst, int n)
 	return 4;
 }
 
+/**
+ * @brief rozpakowuje init_msg
+ * @param[in] src Bufor zawierający spakowaną wiadomość
+ * @param[out] dst Struktura wynikowa
+ * @return typ wiadomości lub ujemny kod błędu w przypadku błędu
+ */
 static int unpack_init_msg(unsigned char *src, struct init_msg *dst)
 {
 	uint16_t timeout;
@@ -39,6 +58,13 @@ static int unpack_init_msg(unsigned char *src, struct init_msg *dst)
 	return dst->type;
 }
 
+/**
+ * @brief pakuje data_msg
+ * @param[in] msg Wiadomość do spakowania
+ * @param[out] dst Bufor wynikowy
+ * @param[in] n Rozmiar bufora dst
+ * @return liczba zapisanych bajtów lub ujemny kod błędu w przypadku błędu
+ */
 static int pack_data_msg(struct data_msg *msg, unsigned char *dst, int n)
 {
 	uint16_t count = msg->count << 3;
@@ -63,6 +89,12 @@ static int pack_data_msg(struct data_msg *msg, unsigned char *dst, int n)
 	return DATA_T_SIZE * msg->count + 2;
 }
 
+/**
+ * @brief rozpakowuje data_msg
+ * @param[in] src Bufor zawierający spakowaną wiadomość
+ * @param[out] dst Struktura wynikowa
+ * @return typ wiadomości lub ujemny kod błędu w przypadku błędu
+ */
 static int unpack_data_msg(unsigned char *src, struct data_msg *dst)
 {
 	int i;
@@ -85,6 +117,13 @@ static int unpack_data_msg(unsigned char *src, struct data_msg *dst)
 	return dst->type;
 }
 
+/**
+ * @brief pakuje info_msg
+ * @param[in] msg Wiadomość do spakowania
+ * @param[out] dst Bufor wynikowy
+ * @param[in] n Rozmiar bufora dst
+ * @return liczba zapisanych bajtów lub ujemny kod błędu w przypadku błędu
+ */
 static int pack_info_msg(struct info_msg *msg, unsigned char *dst, int n)
 {
 	if (n < 1)
@@ -95,6 +134,12 @@ static int pack_info_msg(struct info_msg *msg, unsigned char *dst, int n)
 	return 1;
 }
 
+/**
+ * @brief rozpakowuje init_msg
+ * @param[in] src Bufor zawierający spakowaną wiadomość
+ * @param[out] dst Struktura wynikowa
+ * @return typ wiadomości lub ujemny kod błędu w przypadku błędu
+ */
 static int unpack_info_msg(unsigned char *src,struct info_msg *dst)
 {	
 	dst->type = (src[0] & 0xe0) >> 5;
