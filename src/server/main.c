@@ -10,10 +10,11 @@
 #include <netdb.h>
 #include <string.h>
 
-#define HOSTNAME "localhost"
+#define FIRST_NAME "localhost"
 #define RING 0
 #define DOUBLE_LIST 1
 #define PORT 1337
+#define MAX_DATA 256
 
 int mode = RING;
 int sock_first, sock_last;
@@ -26,7 +27,7 @@ void* first_loop(void* arg)
     printf("Thread started\n");
     while(1)
     {
-
+        //TODO: wysyłanie wiadomości
     }
     return NULL;
 }
@@ -37,7 +38,19 @@ void last_loop()
     printf("Last loop\n");
     while(1)
     {
-
+        if(mode == RING)
+        {
+            printf("Waiting for data...\n");
+            char buf[MAX_DATA];
+            unsigned last_addr_len = sizeof(last_addr);
+            int len = recvfrom(sock_last, buf, MAX_DATA, 0, (struct sockaddr*)&last_addr, &last_addr_len);
+            printf("Received %d bytes: %s\n", len, buf);
+            //TODO: parsowanie i przetwarzanie wyniku
+        }
+        else
+        {
+            printf("Mode changed to double-list\n");
+        }
     }
 }
 
@@ -47,13 +60,13 @@ int initialize_sockets()
     sock_first = socket(AF_INET, SOCK_DGRAM, 0);
     if(sock_first < 0)
     {
-        printf("Failed to create socket");
+        printf("Failed to create socket\n");
         return -1;
     }
     sock_last = socket(AF_INET, SOCK_DGRAM, 0);
     if(sock_last < 0)
     {
-        printf("Failed to create socket");
+        printf("Failed to create socket\n");
         return -1;
     }
     return 0;
@@ -69,7 +82,11 @@ void initilize_sockaddr()
     last_addr.sin_addr.s_addr = INADDR_ANY;
     last_addr.sin_port = htons(PORT);
 
+
+    struct hostent *hostinfo = gethostbyname(FIRST_NAME);
     first_addr.sin_family = AF_INET;
+    first_addr.sin_addr = *(struct in_addr *)hostinfo->h_addr;
+    first_addr.sin_port = htons(PORT);    
 }
 
 // Creates thread for communication with first sensor
@@ -92,17 +109,16 @@ int main(int argc, char const *argv[])
     initilize_sockaddr();
     if(bind(sock_last, (struct sockaddr*) &last_addr, sizeof(last_addr)) < 0)
     {
-        printf("Failed to bind socket");
-        return -1;
-    }
-    if(initialize_thread() < 0)
-    {
-        printf("Failed to init thread");
+        printf("Failed to bind socket\n");
         return -1;
     }
     printf("Server launched\n");
+    if(initialize_thread() < 0)
+    {
+        printf("Failed to init thread\n");
+        return -1;
+    }
     last_loop();
     pthread_join(first_thread, NULL);
-    printf("Job finished\n");
     return 0;
 }
