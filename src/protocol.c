@@ -150,7 +150,6 @@ static int unpack_info_msg(unsigned char *src,struct info_msg *dst)
 int pack_msg(void *msg, unsigned char *dst, int n)
 {
 	struct info_msg *header;
-	int i, off;
 
 	header = msg;
 	switch (header->type) {
