@@ -9,25 +9,83 @@
 #include <netinet/in.h>
 #include <netdb.h>
 #include <string.h>
+#include <stdlib.h>
+#include <unistd.h>
+
+#include "../protocol.h"
 
 #define FIRST_NAME "localhost"
 #define RING 0
 #define DOUBLE_LIST 1
-#define PORT 1337
+#define PORT_FIRST 4001
+#define PORT_LAST 4444
 #define MAX_DATA 256
+#define SENSOR_PERIOD 1000 //ms
+#define SENSOR_TIMEOUT 1000 //ms
+#define SERVER_TIMEOUT 1000 //ms
 
 int mode = RING;
 int sock_first, sock_last;
 pthread_t first_thread;
 struct sockaddr_in first_addr, last_addr;
 
+// Sends initializing message to sensors
+void send_init_msg()
+{
+    union msg msg;
+    msg.init.type = INIT_MSG;
+    msg.init.timeout = SENSOR_TIMEOUT;
+    msg.init.period = SENSOR_PERIOD;
+    int buf_len = sizeof(msg.init);
+    unsigned char* buf = malloc(buf_len);
+    if(pack_msg(&msg, buf, buf_len) < 0)
+    {
+        printf("Error: failed to pack init msg\n");
+        exit(-1);
+    }
+    unsigned first_len = sizeof(first_addr);
+    if(sendto(sock_first, buf, buf_len, 0, (struct sockaddr* )&first_addr, first_len) < 0)
+    {
+        printf("Error: failed to send init msg\n");
+        exit(-1);
+    }
+    printf("Init message sent\n");
+    free(buf);
+}
+
+// Sends empty data message to first sensor to gather data
+void send_data_msg()
+{
+    union msg msg;
+    msg.data.type = DATA_MSG;
+    msg.data.count = 0;
+    msg.data.data = NULL;
+    int buf_len = sizeof(msg.data);
+    unsigned char* buf = malloc(buf_len);
+    if(pack_msg(&msg, buf, buf_len) < 0)
+    {
+        printf("Error: failed to pack data msg\n");
+        exit(-1);
+    }
+    unsigned first_len = sizeof(first_addr);
+    if(sendto(sock_first, buf, buf_len, 0, (struct sockaddr* )&first_addr, first_len) < 0)
+    {
+        printf("Error: failed to send data msg\n");
+        exit(-1);
+    }
+    printf("Data message sent\n");
+    free(buf);
+}
+
 // Loop for communication with first sensor
 void* first_loop(void* arg)
 {
     printf("Thread started\n");
+    send_init_msg();
     while(1)
     {
-        //TODO: wysyłanie wiadomości
+        send_data_msg();
+        usleep(SERVER_TIMEOUT*1000);
     }
     return NULL;
 }
@@ -51,6 +109,7 @@ void last_loop()
         {
             printf("Mode changed to double-list\n");
         }
+        usleep(SERVER_TIMEOUT*1000);
     }
 }
 
@@ -80,13 +139,13 @@ void initilize_sockaddr()
 
     last_addr.sin_family = AF_INET;
     last_addr.sin_addr.s_addr = INADDR_ANY;
-    last_addr.sin_port = htons(PORT);
+    last_addr.sin_port = htons(PORT_LAST);
 
 
     struct hostent *hostinfo = gethostbyname(FIRST_NAME);
     first_addr.sin_family = AF_INET;
     first_addr.sin_addr = *(struct in_addr *)hostinfo->h_addr;
-    first_addr.sin_port = htons(PORT);    
+    first_addr.sin_port = htons(PORT_FIRST);    
 }
 
 // Creates thread for communication with first sensor

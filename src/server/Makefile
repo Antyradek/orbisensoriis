@@ -2,7 +2,7 @@ CC=gcc
 LIBS=-lpthread
 OUTPUT=server
 CFLAGS=-Wall
-FILES=main.c
+FILES=main.c ../protocol.c
 
-all:
+all: ../protocol.h
 	$(CC) $(CFLAGS) $(FILES) -o $(OUTPUT) $(LIBS)
