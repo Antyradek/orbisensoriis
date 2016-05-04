@@ -13,6 +13,7 @@
 #include <unistd.h>
 
 #include "../protocol.h"
+#include "../helper.h"
 
 #define FIRST_NAME "localhost"
 #define RING 0
@@ -40,16 +41,16 @@ void send_init_msg()
     unsigned char* buf = malloc(buf_len);
     if(pack_msg(&msg, buf, buf_len) < 0)
     {
-        printf("Error: failed to pack init msg\n");
+        print_error("Failed to pack init msg");
         exit(-1);
     }
     unsigned first_len = sizeof(first_addr);
     if(sendto(sock_first, buf, buf_len, 0, (struct sockaddr* )&first_addr, first_len) < 0)
     {
-        printf("Error: failed to send init msg\n");
+        print_error("Failed to send init msg");
         exit(-1);
     }
-    printf("Init message sent\n");
+    print_info("Init message sent");
     free(buf);
 }
 
@@ -64,23 +65,23 @@ void send_data_msg()
     unsigned char* buf = malloc(buf_len);
     if(pack_msg(&msg, buf, buf_len) < 0)
     {
-        printf("Error: failed to pack data msg\n");
+        print_error("Failed to pack data msg");
         exit(-1);
     }
     unsigned first_len = sizeof(first_addr);
     if(sendto(sock_first, buf, buf_len, 0, (struct sockaddr* )&first_addr, first_len) < 0)
     {
-        printf("Error: failed to send data msg\n");
+        print_error("Failed to send data msg");
         exit(-1);
     }
-    printf("Data message sent\n");
+    print_info("Data message sent");
     free(buf);
 }
 
 // Loop for communication with first sensor
 void* first_loop(void* arg)
 {
-    printf("Thread started\n");
+    print_success("Loop thread started");
     send_init_msg();
     while(1)
     {
@@ -93,21 +94,21 @@ void* first_loop(void* arg)
 // Loop for communication with last sensor
 void last_loop()
 {
-    printf("Last loop\n");
+    print_info("Last loop");
     while(1)
     {
         if(mode == RING)
         {
-            printf("Waiting for data...\n");
+            print_info("Waiting for data...");
             char buf[MAX_DATA];
             unsigned last_addr_len = sizeof(last_addr);
             int len = recvfrom(sock_last, buf, MAX_DATA, 0, (struct sockaddr*)&last_addr, &last_addr_len);
-            printf("Received %d bytes: %s\n", len, buf);
+            printf("Received %d bytes: %s\n", len, buf); //TODO cholerny C, stworzyć string i wysłać do funkcji logującej
             //TODO: parsowanie i przetwarzanie wyniku
         }
         else
         {
-            printf("Mode changed to double-list\n");
+            print_info("Mode changed to double-list");
         }
         usleep(SERVER_TIMEOUT*1000);
     }
@@ -119,13 +120,13 @@ int initialize_sockets()
     sock_first = socket(AF_INET, SOCK_DGRAM, 0);
     if(sock_first < 0)
     {
-        printf("Failed to create socket\n");
+        print_error("Failed to create socket");
         return -1;
     }
     sock_last = socket(AF_INET, SOCK_DGRAM, 0);
     if(sock_last < 0)
     {
-        printf("Failed to create socket\n");
+        print_error("Failed to create socket");
         return -1;
     }
     return 0;
@@ -155,7 +156,7 @@ int initialize_thread()
     {
         return -1;
     }   
-    printf("Thread created\n");
+    print_info("Thread created");
     return 0;
 }
 
@@ -168,13 +169,13 @@ int main(int argc, char const *argv[])
     initilize_sockaddr();
     if(bind(sock_last, (struct sockaddr*) &last_addr, sizeof(last_addr)) < 0)
     {
-        printf("Failed to bind socket\n");
+        print_error("Failed to bind socket");
         return -1;
     }
-    printf("Server launched\n");
+    print_success("Server launched");
     if(initialize_thread() < 0)
     {
-        printf("Failed to init thread\n");
+        print_error("Failed to init thread");
         return -1;
     }
     last_loop();
