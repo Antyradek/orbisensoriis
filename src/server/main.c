@@ -103,7 +103,11 @@ void last_loop()
             char buf[MAX_DATA];
             unsigned last_addr_len = sizeof(last_addr);
             int len = recvfrom(sock_last, buf, MAX_DATA, 0, (struct sockaddr*)&last_addr, &last_addr_len);
-            printf("Received %d bytes: %s\n", len, buf); //TODO cholerny C, stworzyć string i wysłać do funkcji logującej
+			
+			char info_msg[len + 30];
+			sprintf(info_msg, "Received %d bytes: %s", len, buf);
+            print_info(info_msg);
+			
             //TODO: parsowanie i przetwarzanie wyniku
         }
         else
