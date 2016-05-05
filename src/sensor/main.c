@@ -16,25 +16,17 @@
 
 int socket_prev;
 int socket_next;
-int socket_in_form_prev;
-int socket_in_from_next;
 
 //paramentry następnika
 const char* addr_next;
-int port_next;
+const char* port_next;
 //paramentry poprzednika
 const char* addr_prev;
-int port_prev;
-//porty wejściowe od innych czujników
-const char* port_in_from_next;
-const char* port_in_from_prev;
+const char* port_prev;
 
 //wysyłające
 struct sockaddr_in sockaddr_next;
 struct sockaddr_in sockaddr_prev;
-//pasywne
-struct sockaddr_in sockaddr_in_from_next;
-struct sockaddr_in sockaddr_in_from_prev;
 
 // Initializacja gniazd
 /*
@@ -69,18 +61,17 @@ int initialize_sockets()
     return 0;
 }*/
 
-//initializacja pasywnych adresów do nasłuchiwania
-int initilize_passive_addresses()
+//initializacja adresów
+int initilize_sockets()
 {
-	print_info("Now initializing passive socket to listen to next sensor");
-	//zmodyfikowany kod z przykładu w „man 3 getaddrinfo”
-
-	//Następny, który będzie się łączył do nas
 	struct addrinfo hints;
 	struct addrinfo *result;
 	struct addrinfo *rp;
 	int addrinfo_out;
 	int sfd;
+	//zmodyfikowany kod z przykładu w „man 3 getaddrinfo”
+
+	print_info("Now initializing passive socket to listen to previous sensor");
 	memset(&hints, 0, sizeof(struct addrinfo));
 	//pasywny, do niego się łączymy, będzie użyty do bind
 	hints.ai_flags = AI_PASSIVE;
@@ -94,46 +85,86 @@ int initilize_passive_addresses()
 	hints.ai_canonname = NULL;
     hints.ai_addr = NULL;
     hints.ai_next = NULL;
-
 	/* Ustawiamy adresy
 	NULL - gniazdo pasywne, nie łączymy się nim na żadny adres.
 	port_in_from_next - nasz port na którym nasłuchujemy danych od następnego czujnika
 	next_hints - opis naszego gniazda
 	next_result - zwracana struktura z adresami
 	*/
-	addrinfo_out = getaddrinfo(NULL, port_in_from_next, &hints, &result);
+	addrinfo_out = getaddrinfo(NULL, port_prev, &hints, &result);
 	if(addrinfo_out != 0)
 	{
 		print_error("Failed to getaddrinfo()");
 		return addrinfo_out;
 	}
-	//mamy listę jednokierunkową kilku adresów, łączymy się po kolei
+	//mamy listę jednokierunkową kilku adresów, sprawdzamy po kolei
 	for (rp = result; rp != NULL; rp = rp -> ai_next)
 	{
-        sfd = socket(rp -> ai_family, rp -> ai_socktype, rp -> ai_protocol);
-        if (sfd == -1)
+		sfd = socket(rp -> ai_family, rp -> ai_socktype, rp -> ai_protocol);
+		if (sfd == -1)
 		{
 			print_info("One address failed");
-            continue;
+			continue;
 		}
-       	if (bind(sfd, rp -> ai_addr, rp -> ai_addrlen) == 0)
-	   	{
-            break;
+		if (bind(sfd, rp -> ai_addr, rp -> ai_addrlen) == 0)
+		{
+			break;
 		}
-       	close(sfd);
-    }
+		close(sfd);
+	}
 	if (rp == NULL)
 	{
-        print_error("Could not bind");
-        return -1;
-    }
+		print_error("Could not bind");
+		return -1;
+	}
 	//cieknąca pamięć to zła rzecz
 	freeaddrinfo(result);
-	socket_in_from_next = sfd;
+	socket_prev = sfd;
+	print_success("Socket to previous sensor succeeded!");
 
-	print_success("Socket to listen to next sensor succeeded!");
+	print_info("Now initializing active socket to send data to next sensor");
+	memset(&hints, 0, sizeof(struct addrinfo));
+	//aktywny, nim łączymy się do następnika
+	hints.ai_flags = 0;
+	//tylko ipv4
+	hints.ai_family = AF_INET;
+	//datagramowy
+	hints.ai_socktype = SOCK_DGRAM;
+	//dowolny protokół
+	hints.ai_protocol = 0;
+	//pozostałe są zwracane przez getaddrinfo
+	hints.ai_canonname = NULL;
+    hints.ai_addr = NULL;
+    hints.ai_next = NULL;
 
-	//TODO następne gniazdko
+	addrinfo_out = getaddrinfo(addr_next, port_next, &hints, &result);
+	if(addrinfo_out != 0)
+	{
+		print_error("Failed to getaddrinfo()");
+		return addrinfo_out;
+	}
+	for (rp = result; rp != NULL; rp = rp -> ai_next)
+	{
+		sfd = socket(rp -> ai_family, rp -> ai_socktype, rp -> ai_protocol);
+		if (sfd == -1)
+		{
+			print_info("One address failed");
+			continue;
+		}
+		if (connect(sfd, rp -> ai_addr, rp -> ai_addrlen) == 0)
+		{
+			break;
+		}
+		close(sfd);
+	}
+	if (rp == NULL)
+	{
+		print_error("Could not connect");
+		return -1;
+	}
+	socket_next = sfd;
+	freeaddrinfo(result);
+	print_success("Socket to next sensor succeeded!");
 
 	return 0;
 
@@ -141,22 +172,19 @@ int initilize_passive_addresses()
 
 int main(int argc, char const *argv[])
 {
-	if(argc != 7)
+	if(argc != 5)
 	{
-		printf("Użycie: [adres_poprzednika] [port_poprzednika] [adres_następnika] [port_następnika] [port_od_poprzednika] [port_od_następnika] \n");
+		printf("Użycie: [adres_poprzednika] [port_poprzednika] [adres_następnika] [port_następnika] \n");
 		return 0;
 	}
 	addr_prev = argv[1];
-	port_prev = atoi(argv[2]);
+	port_prev = argv[2];
 
 	addr_next = argv[3];
-	port_next = atoi(argv[4]);
+	port_next = argv[4];
 
-	port_in_from_prev = argv[5];
-	port_in_from_next = argv[6];
+	initilize_sockets();
 
-	initilize_passive_addresses();
-	
 	//TODO inicjalizacja aktywnych adresów do wysyłania
 
 }
