@@ -103,11 +103,11 @@ void last_loop()
             char buf[MAX_DATA];
             unsigned last_addr_len = sizeof(last_addr);
             int len = recvfrom(sock_last, buf, MAX_DATA, 0, (struct sockaddr*)&last_addr, &last_addr_len);
-			
+
 			char info_msg[len + 30];
 			sprintf(info_msg, "Received %d bytes: %s", len, buf);
             print_info(info_msg);
-			
+
             //TODO: parsowanie i przetwarzanie wyniku
         }
         else
@@ -146,11 +146,13 @@ void initilize_sockaddr()
     last_addr.sin_addr.s_addr = INADDR_ANY;
     last_addr.sin_port = htons(PORT_LAST);
 
+    //TODO gethostbyname jest sprecyzowana w dokumentacji jako przestarzała!!!
+    #warning "Using obsolete gethostbyname function!"
 
     struct hostent *hostinfo = gethostbyname(FIRST_NAME);
     first_addr.sin_family = AF_INET;
     first_addr.sin_addr = *(struct in_addr *)hostinfo->h_addr;
-    first_addr.sin_port = htons(PORT_FIRST);    
+    first_addr.sin_port = htons(PORT_FIRST);
 }
 
 // Creates thread for communication with first sensor
@@ -159,7 +161,7 @@ int initialize_thread()
     if(pthread_create(&first_thread, NULL, first_loop, NULL) != 0)
     {
         return -1;
-    }   
+    }
     print_info("Thread created");
     return 0;
 }

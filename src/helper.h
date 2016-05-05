@@ -17,26 +17,26 @@
 //TODO napisać odpowiednio komentarze w doxygenie, jak ogarnę, dlaczego nie mam autouzupełniania
 
 //drukuje na czerwono
-void print_error(char* error_msg)
+void print_error(const char* error_msg)
 {
     //zastanawiam się, dlaczego to działa...
     printf(TEXT_COLOR_RED "[!] %s" TEXT_COLOR_DEFAULT "\n", error_msg);
 }
 
 //i na zielono
-void print_success(char* success_msg)
+void print_success(const char* success_msg)
 {
     printf(TEXT_COLOR_GREEN "[V] %s" TEXT_COLOR_DEFAULT "\n", success_msg);
 }
 
 //żółto
-void print_warning(char* warning_msg)
+void print_warning(const char* warning_msg)
 {
     printf(TEXT_COLOR_YELLOW "[?] %s" TEXT_COLOR_DEFAULT "\n", warning_msg);
 }
 
 //i na domyślnie
-void print_info(char* info_msg)
+void print_info(const char* info_msg)
 {
     printf("[I] %s\n", info_msg);
 }
