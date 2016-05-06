@@ -13,34 +13,34 @@
  * Określa typ wiadomości
  */
 enum msg_type {
-	INIT_MSG = 1,
-	DATA_MSG = 2,
-	ERR_MSG = 3,
-	ACK_MSG = 4,
-	FINIT_MSG = 5,
-	RECONF_MSG = 6,
+    INIT_MSG = 1,
+    DATA_MSG = 2,
+    ERR_MSG = 3,
+    ACK_MSG = 4,
+    FINIT_MSG = 5,
+    RECONF_MSG = 6,
 };
 
 /**
  * Wiadomość inicjująca
  */
 struct init_msg {
-	/** typ */
-	uint8_t type;
-	/** czas nieaktywności czujników */
-	uint16_t timeout;
-	/** maksymalny czas aktywności czujników */
-	uint16_t period;
+    /** typ */
+    uint8_t type;
+    /** czas nieaktywności czujników */
+    uint16_t timeout;
+    /** maksymalny czas aktywności czujników */
+    uint16_t period;
 };
 
 /**
  * Dane z czujnika
  */
 struct data_t {
-	/** id czujnika */
-	uint16_t id;
-	/** Dane z czujnika */
-	uint32_t data;
+    /** id czujnika */
+    uint16_t id;
+    /** Dane z czujnika */
+    uint32_t data;
 };
 
 /** docelowy rozmiar pakietu z danymi pojedynczego czujnika */
@@ -50,30 +50,30 @@ struct data_t {
  * Wiadomość z danymi czujników
  */
 struct data_msg {
-	/** Typ wiadomości */
-	uint8_t type;
-	/** Liczba pakietów z danymi */
-	uint16_t count;
-	/** Lista pakietów z danymi */
-	struct data_t *data;
+    /** Typ wiadomości */
+    uint8_t type;
+    /** Liczba pakietów z danymi */
+    uint16_t count;
+    /** Lista pakietów z danymi */
+    struct data_t *data;
 };
 
 /**
  * Wiadomość informacyjna
  */
 struct info_msg {
-	/** Typ wiadomości */
-	uint8_t type;
+    /** Typ wiadomości */
+    uint8_t type;
 };
 
 /**
  * Pomocniczy typ reprezentujący dowolną wiadomość
  */
 union msg {
-	uint8_t type;
-	struct info_msg info;
-	struct data_msg data;
-	struct init_msg init;
+    uint8_t type;
+    struct info_msg info;
+    struct data_msg data;
+    struct init_msg init;
 };
 
 /**
