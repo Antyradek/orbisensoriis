@@ -2,7 +2,14 @@
  * helper.h
  * Radosław Świątkiewicz
  * 2016-05-04
+ *
+ * Mateusz Blicharski
+ * Zamiana printf na vfprintf
+ * 2016-05-06 
  */
+
+#include <stdio.h>
+#include <stdarg.h>
 
 /**
  * @brief Nagłówek zawierający kilka pomocnych stałych i funkcji.
@@ -17,26 +24,46 @@
 //TODO napisać odpowiednio komentarze w doxygenie, jak ogarnę, dlaczego nie mam autouzupełniania
 
 //drukuje na czerwono
-void print_error(const char* error_msg)
+void print_error(const char* fmt, ...)
 {
-    //zastanawiam się, dlaczego to działa...
-    printf(TEXT_COLOR_RED "[!] %s" TEXT_COLOR_DEFAULT "\n", error_msg);
+    va_list argp;
+    va_start(argp, fmt);
+    fprintf(stderr, TEXT_COLOR_RED "[!] " TEXT_COLOR_DEFAULT);
+    vfprintf(stderr, fmt, argp);
+    fprintf(stderr, "\n" TEXT_COLOR_DEFAULT);
+    va_end(argp);
+
 }
 
 //i na zielono
-void print_success(const char* success_msg)
+void print_success(const char* fmt, ...)
 {
-    printf(TEXT_COLOR_GREEN "[V] %s" TEXT_COLOR_DEFAULT "\n", success_msg);
+    va_list argp;
+    va_start(argp, fmt);
+    fprintf(stdout, TEXT_COLOR_GREEN "[V] ");
+    vfprintf(stdout, fmt, argp);
+    fprintf(stdout, "\n" TEXT_COLOR_DEFAULT);
+    va_end(argp);
 }
 
 //żółto
-void print_warning(const char* warning_msg)
+void print_warning(const char* fmt, ...)
 {
-    printf(TEXT_COLOR_YELLOW "[?] %s" TEXT_COLOR_DEFAULT "\n", warning_msg);
+    va_list argp;
+    va_start(argp, fmt);
+    fprintf(stderr, TEXT_COLOR_YELLOW "[?] ");
+    vfprintf(stderr, fmt, argp);
+    fprintf(stderr, "\n" TEXT_COLOR_DEFAULT);
+    va_end(argp);
 }
 
 //i na domyślnie
-void print_info(const char* info_msg)
+void print_info(const char* fmt, ...)
 {
-    printf("[I] %s\n", info_msg);
+    va_list argp;
+    va_start(argp, fmt);
+    fprintf(stdout, "[I] ");
+    vfprintf(stdout, fmt, argp);
+    fprintf(stdout, "\n" TEXT_COLOR_DEFAULT);
+    va_end(argp);
 }

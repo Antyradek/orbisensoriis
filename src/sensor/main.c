@@ -151,9 +151,7 @@ int main(int argc, char const *argv[])
 	sensor_id = (short)atoi(argv[5]);
 	initilize_sockets();
 	
-	char success_msg[50];
-	sprintf(success_msg, "Sensor %d is now ready for work.", sensor_id);
-	print_success(success_msg);
+	print_success("Sensor %d is now ready for work.", sensor_id);
 
 	//główna pętla
 	struct sockaddr_storage peer_addr;
@@ -176,9 +174,7 @@ int main(int argc, char const *argv[])
        s = getnameinfo((struct sockaddr *) &peer_addr, peer_addr_len, host, NI_MAXHOST, service, NI_MAXSERV, NI_NUMERICSERV);
        if (s == 0)
 	   {
-		   char infotext[nread + 60];
-		   sprintf(infotext, "Received %ld bytes from %s:%s: %s\n", (long int) nread, host, service, buf);
-		   print_info(infotext);
+		   print_info("Received %ld bytes from %s:%s: %s\n", (long int) nread, host, service, buf);
 		   //TODO zabawa z odebranymi danymi
 
 		   //wysyłamy puki co testowo pakiet dalej
