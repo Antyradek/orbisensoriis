@@ -145,13 +145,33 @@ int initilize_sockets()
    @brief Take initial message, set parameters and send to the next node.
    @param timeout How long awake.
    @param period How long sleep.
+   @return 0 on success
 */
-void take_init_msg(int new_timeout, int new_period)
+int take_init_msg(struct init_msg received_msg)
 {
-	timeout = new_timeout;
-	period = new_period;
-	print_success("Received Initial Message of timeout %d and period %d", timeout, period);
-	//TODO itd...
+	timeout = received_msg.timeout;
+	period = received_msg.period;
+	print_success("Received Initial Message with timeout %d and period %d", timeout, period);
+
+	//wysyłanie wiadomości do kolejnego czujnika
+	union msg msg;
+    msg.init.type = INIT_MSG;
+    msg.init.timeout = timeout;
+    msg.init.period = period;
+    int buf_len = sizeof(msg.init);
+    unsigned char buf[buf_len];
+    if(pack_msg(&msg, buf, buf_len) < 0)
+    {
+        print_error("Failed to pack init msg");
+        return -1;
+    }
+    if(write(socket_next, buf, buf_len) != buf_len)
+    {
+        print_error("Failed to send init msg");
+        return -2;
+    }
+    print_success("Sent Initial Message to next sensor");
+	return 0;
 }
 
 int main(int argc, char const *argv[])
@@ -197,27 +217,13 @@ int main(int argc, char const *argv[])
 		   //akcja w zależności od wiadomości
 		   switch(msg_type)
 		   {
-			   case 1:
-			   		take_init_msg(received_msg.init.timeout, received_msg.init.period);
+			   case INIT_MSG:
+			   		take_init_msg(received_msg.init);
 					break;
 				//TODO case pozostałe:
 				default:
-					print_info("Received unknown %ld bytes from %s:%s: %s\n", (long int) nread, host, service, buf);
+					print_warning("Received unknown %ld bytes from %s:%s: %s\n", (long int) nread, host, service, buf);
 		   }
-
-		   //wysyłamy puki co testowo pakiet dalej
-		   char text_to_send[50];
-		   sprintf(text_to_send, "Dzień dobry od czujnika %d\n", sensor_id);
-		   int data_size = strlen(text_to_send) + 1;
-		   if(write(socket_next, text_to_send, data_size) != data_size)
-		   {
-			   print_info("Nie udało się wysłać pakietu");
-		   }
-		   else
-		   {
-			   print_info("Wysłano pakiet do następnika");
-		   }
-
 	   }
     	else
 		{
