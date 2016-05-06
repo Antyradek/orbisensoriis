@@ -23,8 +23,8 @@ function orbisensoriis_proto.dissector(buffer,pinfo,tree)
         subtree:add(buffer(0,2),"count: " .. count)
         local offset = 2
         for i=0,count-1,1 do
-            local id = buffer(offset,2):uint()
-            local data = buffer(offset + 2,4):uint()
+            local id = buffer(offset,2):le_uint()
+            local data = buffer(offset + 2,4):le_uint()
             subtree:add(buffer(offset,6),"id: " .. id .. " data: " .. data)
             offset = offset + 6
         end
