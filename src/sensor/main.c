@@ -27,8 +27,13 @@ const char* addr_prev;
 const char* port_prev;
 
 short sensor_id;
+int timeout;
+int period;
 
-//initializacja adresów
+/**
+  * @brief Initialize, connect and bind necessary sockets.
+  * @return Error code, or 0.
+*/
 int initilize_sockets()
 {
 	struct addrinfo hints;
@@ -134,7 +139,19 @@ int initilize_sockets()
 	print_success("Socket to next sensor succeeded!");
 
 	return 0;
+}
 
+/**
+   @brief Take initial message, set parameters and send to the next node.
+   @param timeout How long awake.
+   @param period How long sleep.
+*/
+void take_init_msg(int new_timeout, int new_period)
+{
+	timeout = new_timeout;
+	period = new_period;
+	print_success("Received Initial Message of timeout %d and period %d", timeout, period);
+	//TODO itd...
 }
 
 int main(int argc, char const *argv[])
@@ -150,14 +167,14 @@ int main(int argc, char const *argv[])
 	port_next = argv[4];
 	sensor_id = (short)atoi(argv[5]);
 	initilize_sockets();
-	
+
 	print_success("Sensor %d is now ready for work.", sensor_id);
 
 	//główna pętla
 	struct sockaddr_storage peer_addr;
     socklen_t peer_addr_len;
     ssize_t nread;
-    char buf[BUF_SIZE];
+    unsigned char buf[BUF_SIZE];
 	int s;
 	while(1)
 	{
@@ -174,8 +191,19 @@ int main(int argc, char const *argv[])
        s = getnameinfo((struct sockaddr *) &peer_addr, peer_addr_len, host, NI_MAXHOST, service, NI_MAXSERV, NI_NUMERICSERV);
        if (s == 0)
 	   {
-		   print_info("Received %ld bytes from %s:%s: %s\n", (long int) nread, host, service, buf);
-		   //TODO zabawa z odebranymi danymi
+		   //rozpakowanie wiadomości
+		   union msg received_msg;
+		   int msg_type = unpack_msg(buf, &received_msg);
+		   //akcja w zależności od wiadomości
+		   switch(msg_type)
+		   {
+			   case 1:
+			   		take_init_msg(received_msg.init.timeout, received_msg.init.period);
+					break;
+				//TODO case pozostałe:
+				default:
+					print_info("Received unknown %ld bytes from %s:%s: %s\n", (long int) nread, host, service, buf);
+		   }
 
 		   //wysyłamy puki co testowo pakiet dalej
 		   char text_to_send[50];
@@ -189,7 +217,7 @@ int main(int argc, char const *argv[])
 		   {
 			   print_info("Wysłano pakiet do następnika");
 		   }
-		   
+
 	   }
     	else
 		{
