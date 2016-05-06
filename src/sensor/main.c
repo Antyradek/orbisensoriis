@@ -26,7 +26,7 @@ const char* port_next;
 const char* addr_prev;
 const char* port_prev;
 
-short sensor_id;
+uint16_t sensor_id;
 int timeout;
 int period;
 
@@ -142,10 +142,10 @@ int initilize_sockets()
 }
 
 /**
-   @brief Take initial message, set parameters and send to the next node.
-   @param timeout How long awake.
-   @param period How long sleep.
-   @return 0 on success
+  * @brief Take initial message, set parameters and send to the next node.
+  * @param timeout How long awake.
+  * @param period How long sleep.
+  * @return 0 on success
 */
 int take_init_msg(struct init_msg received_msg)
 {
@@ -160,18 +160,76 @@ int take_init_msg(struct init_msg received_msg)
     msg.init.period = period;
     int buf_len = sizeof(msg.init);
     unsigned char buf[buf_len];
-    if(pack_msg(&msg, buf, buf_len) < 0)
+	int packed_msg_size = pack_msg(&msg, buf, buf_len);
+    if(packed_msg_size < 0)
     {
         print_error("Failed to pack init msg");
         return -1;
     }
-    if(write(socket_next, buf, buf_len) != buf_len)
+    if(write(socket_next, buf, packed_msg_size) != packed_msg_size)
     {
         print_error("Failed to send init msg");
         return -2;
     }
     print_success("Sent Initial Message to next sensor");
 	return 0;
+}
+
+/**
+  * @brief Get last measurement.
+  * @return The last measurement of the sensor
+*/
+int get_measurement()
+{
+	//miernik mierzy zaraz po obudzeniu się, a nie teraz
+	//testowo podajemy losową liczbę.
+	return rand() % 10000;
+}
+
+int take_data_msg(struct data_msg received_msg)
+{
+	int old_data_count = received_msg.count;
+
+	print_success("Received %d measurements:", old_data_count);
+	int i;
+	for(i = 0; i < old_data_count; ++i)
+	{
+		print_info("Sensor: %d Data: %d", received_msg.data[i].id, received_msg.data[i].data);
+	}
+
+	int measure_count = old_data_count + 1;
+	uint32_t new_measure = get_measurement();
+
+	//rezerwacja pamięci
+	struct data_t all_data[measure_count * sizeof(struct data_t)];
+	//kopiowanie starych wyników
+	memcpy(all_data, received_msg.data, old_data_count * sizeof(struct data_t));
+	//dodanie nowego wyniku
+	all_data[old_data_count].id = sensor_id;
+	all_data[old_data_count].data = new_measure;
+
+	//wysyłanie wiadomości do kolejnego czujnika
+	union msg msg;
+    msg.data.type = DATA_MSG;
+    msg.data.count = measure_count;
+    msg.data.data = all_data;
+    int buf_len = sizeof(msg.data) + sizeof(all_data);
+    unsigned char buf[buf_len];
+	int packed_msg_size = pack_msg(&msg, buf, buf_len);
+    if(packed_msg_size < 0)
+    {
+        print_error("Failed to pack data msg");
+        return -1;
+    }
+    if(write(socket_next, buf, packed_msg_size) != packed_msg_size)
+    {
+        print_error("Failed to send data msg");
+        return -2;
+    }
+    print_success("Sent Data Message to next sensor with new measurement %d", new_measure);
+	return 0;
+
+
 }
 
 int main(int argc, char const *argv[])
@@ -185,8 +243,9 @@ int main(int argc, char const *argv[])
 	port_prev = argv[2];
 	addr_next = argv[3];
 	port_next = argv[4];
-	sensor_id = (short)atoi(argv[5]);
+	sensor_id = (uint16_t)atoi(argv[5]);
 	initilize_sockets();
+	srand(sensor_id);
 
 	print_success("Sensor %d is now ready for work.", sensor_id);
 
@@ -219,6 +278,9 @@ int main(int argc, char const *argv[])
 		   {
 			   case INIT_MSG:
 			   		take_init_msg(received_msg.init);
+					break;
+				case DATA_MSG:
+					take_data_msg(received_msg.data);
 					break;
 				//TODO case pozostałe:
 				default:
