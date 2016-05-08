@@ -28,7 +28,7 @@ void print_error(const char* fmt, ...)
 {
     va_list argp;
     va_start(argp, fmt);
-    fprintf(stderr, TEXT_COLOR_RED "[!] " TEXT_COLOR_DEFAULT);
+    fprintf(stderr, TEXT_COLOR_RED "[!] ");
     vfprintf(stderr, fmt, argp);
     fprintf(stderr, "\n" TEXT_COLOR_DEFAULT);
     va_end(argp);

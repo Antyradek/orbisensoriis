@@ -91,6 +91,35 @@ void* first_loop(void* arg)
     return NULL;
 }
 
+/**
+* @brief Przyjmij wiadomość inicjalizującą o ostatniego czujnika.
+* @param received_msg Struktura odebranej wiadomości
+* @return 0 gdy się udało, lub inna liczba na błąd.
+*/
+static int take_init_msg(struct init_msg received_msg)
+{
+    print_success("Received initial message back");
+    //TODO zmienia stan na jakiś inny i dopiero wtedy wysyła dane
+    return 0;
+}
+
+/**
+* @brief Przyjmij pakiet z danymi i wyświetl je.
+* @param received_msg Struktura z danymi
+* @return 0 jeśli się udało, lub błąd, gdy inna liczba.
+*/
+static int take_data_msg(struct data_msg received_msg)
+{
+    int data_count = received_msg.count;
+    print_success("Received %d measurements:", data_count);
+    int i;
+    for(i = 0; i < data_count; ++i)
+    {
+        print_info("Sensor: %d Data: %d", received_msg.data[i].id, received_msg.data[i].data);
+    }
+    return 0;
+}
+
 // Loop for communication with last sensor
 void last_loop()
 {
@@ -100,13 +129,25 @@ void last_loop()
         if(mode == RING)
         {
             print_info("Waiting for data...");
-            char buf[MAX_DATA];
+            unsigned char buf[MAX_DATA];
             unsigned last_addr_len = sizeof(last_addr);
             int len = recvfrom(sock_last, buf, MAX_DATA, 0, (struct sockaddr*)&last_addr, &last_addr_len);
-
-            print_info("Received %d bytes: %s", len, buf);
-
-            //TODO: parsowanie i przetwarzanie wyniku
+            //rozpakowywanie wiadomości
+            union msg received_msg;
+            int msg_type = unpack_msg(buf, &received_msg);
+            //akcja w zależności od wiadomości
+            switch(msg_type)
+            {
+            case INIT_MSG:
+                take_init_msg(received_msg.init);
+                break;
+            case DATA_MSG:
+                take_data_msg(received_msg.data);
+                break;
+            //TODO case pozostałe:
+            default:
+                print_warning("Received unknown bytes");
+            }
         }
         else
         {

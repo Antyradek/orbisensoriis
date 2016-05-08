@@ -224,7 +224,7 @@ static int take_data_msg(struct data_msg received_msg)
     if(state != NORMAL)
     {
         print_warning("Didn't expect data packet now. Ignoring.");
-        return -3;
+        return UNEXPECTED_MESSAGE;
     }
 
     int old_data_count = received_msg.count;
