@@ -320,6 +320,7 @@ int main(int argc, char const *argv[])
         {
             //rozpakowanie wiadomości
             union msg received_msg;
+            //UWAGA!!! Trzeba sprzątnąć po tej funkcji poniżej.
             int msg_type = unpack_msg(buf, &received_msg);
             //akcja w zależności od wiadomości
             switch(msg_type)
@@ -334,6 +335,8 @@ int main(int argc, char const *argv[])
             default:
                 print_warning("Received unknown %ld bytes from %s:%s: %s\n", (long int) nread, host, service, buf);
             }
+            //sprzątnięcie po rozpakowaniu
+            cleanup_msg(&received_msg);
         }
         else
         {

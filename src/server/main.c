@@ -148,6 +148,7 @@ void last_loop()
             default:
                 print_warning("Received unknown bytes");
             }
+            cleanup_msg(&received_msg);
         }
         else
         {
