@@ -15,6 +15,7 @@
 #include "../helper.h"
 
 #define BUF_SIZE 512
+#define UNEXPECTED_MESSAGE -3
 
 //gniazda
 int socket_prev;
@@ -30,12 +31,25 @@ uint16_t sensor_id;
 //wartości do cyklu sennego
 int timeout;
 int period;
+//ostatni pomiar
+int last_measurement;
+
+//tryb pracy czujnika
+enum sensor_state
+{
+    //czujnik oczekuje na wiadomość inicjalizującą
+    INITIALIZING,
+    //rormalny tryb pracy
+    NORMAL
+};
+
+enum sensor_state state;
 
 /**
 * @brief Zainicjalizuj gniazda i podłącz się do nich.
 * @return 0 gdy się udało, lub błąd.
 */
-int initilize_sockets()
+static int initilize_sockets()
 {
     struct addrinfo hints;
     struct addrinfo *result;
@@ -149,6 +163,12 @@ int initilize_sockets()
 */
 static int take_init_msg(struct init_msg received_msg)
 {
+    if(state != INITIALIZING)
+    {
+        print_warning("Didn't expect initial message now. Ignoring.");
+        return UNEXPECTED_MESSAGE;
+    }
+
     timeout = received_msg.timeout;
     period = received_msg.period;
     print_success("Received Initial Message with timeout %d and period %d", timeout, period);
@@ -172,6 +192,7 @@ static int take_init_msg(struct init_msg received_msg)
         return -2;
     }
     print_success("Sent Initial Message to next sensor");
+    state = NORMAL;
     return 0;
 }
 
@@ -181,9 +202,16 @@ static int take_init_msg(struct init_msg received_msg)
 */
 static int get_measurement()
 {
-    //miernik mierzy zaraz po obudzeniu się, a nie teraz
-    //testowo podajemy losową liczbę.
-    return rand() % 10000;
+    return last_measurement;
+}
+
+/**
+* @brief Wykonaj i zapisz pomiar. Może być on pobrany za pomocą get_measurement().
+*/
+static void measure()
+{
+    //wykonuje teraz bardzo skomplikowane pomiary wartości szczęścia we wszechświecie...
+    last_measurement = rand() % 10000;
 }
 
 /**
@@ -193,6 +221,12 @@ static int get_measurement()
 */
 static int take_data_msg(struct data_msg received_msg)
 {
+    if(state != NORMAL)
+    {
+        print_warning("Didn't expect data packet now. Ignoring.");
+        return -3;
+    }
+
     int old_data_count = received_msg.count;
 
     print_success("Received %d measurements:", old_data_count);
@@ -247,10 +281,13 @@ int main(int argc, char const *argv[])
     addr_next = argv[3];
     port_next = argv[4];
     sensor_id = (uint16_t)atoi(argv[5]);
+
+    state = INITIALIZING;
+
     initilize_sockets();
     srand(sensor_id);
 
-    print_success("Sensor %d is now ready for work.", sensor_id);
+    print_success("Sensor %d now waiting for initialization.", sensor_id);
 
     //główna pętla
     struct sockaddr_storage peer_addr;
@@ -260,6 +297,14 @@ int main(int argc, char const *argv[])
     int s;
     while(1)
     {
+        if(state == NORMAL)
+        {
+            //idziemy spać na odpowiedni czas
+            print_info("Now going to sleep.");
+            usleep(timeout * 1000);
+            measure();
+            print_info("Just woke up and waiting for packet.");
+        }
         //odebranie pakietu
         peer_addr_len = sizeof(struct sockaddr_storage);
         nread = recvfrom(socket_prev, buf, BUF_SIZE, 0, (struct sockaddr *) &peer_addr, &peer_addr_len);
