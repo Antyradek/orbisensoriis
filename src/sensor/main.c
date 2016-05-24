@@ -40,7 +40,13 @@ enum sensor_state
     //czujnik oczekuje na wiadomość inicjalizującą
     INITIALIZING,
     //rormalny tryb pracy
-    NORMAL
+    NORMAL,
+    //awaryjny 1 - za przerwaniem
+    EMERGENCY_1,
+    //awaryjny 2 - przed przerwaniem
+    EMERGENCY_2,
+    //konfiguracja
+    CONFIG
 };
 
 enum sensor_state state;
