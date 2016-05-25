@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <sys/select.h>
 #include <netinet/in.h>
 #include <netdb.h>
 #include <string.h>
@@ -45,8 +46,8 @@ enum sensor_state
     EMERGENCY_1,
     //awaryjny 2 - przed przerwaniem
     EMERGENCY_2,
-    //konfiguracja
-    CONFIG
+    //czujnik rozpoczyna wiadomość z danymi
+    STARTING_DATA
 };
 
 enum sensor_state state;
@@ -275,6 +276,75 @@ static int take_data_msg(struct data_msg received_msg)
     return 0;
 }
 
+/**
+* @brief Wyślij pakiet ze swoją daną do następnika
+* @return 0 jeśli się udało, lub błąd, gdy inna liczba.
+*/
+int init_data_msg()
+{
+    uint32_t new_measure = get_measurement();
+
+    //rezerwacja pamięci
+    struct data_t all_data[sizeof(struct data_t)];
+    all_data[0].id = sensor_id;
+    all_data[0].data = new_measure;
+
+    //wysyłanie wiadomości do kolejnego czujnika
+    union msg msg;
+    msg.data.type = DATA_MSG;
+    msg.data.count = 1;
+    msg.data.data = all_data;
+    int buf_len = sizeof(msg.data) + sizeof(all_data);
+    unsigned char buf[buf_len];
+    int packed_msg_size = pack_msg(&msg, buf, buf_len);
+    if(packed_msg_size < 0)
+    {
+        print_error("Failed to pack data msg");
+        return -1;
+    }
+    if(write(socket_next, buf, packed_msg_size) != packed_msg_size)
+    {
+        print_error("Failed to send data msg");
+        return -2;
+    }
+    print_success("Sent Data Message to next sensor with first measurement %d", new_measure);
+    return 0;
+}
+
+/**
+* @brief Przyjmij informację o błędzie i wykonaj odpowiednią akcję w zależności od stanu
+* @return 0 jeśli się udało, lub błąd, gdy inna liczba.
+*/
+static int take_error_msg()
+{
+    //ta wiadomość powinna przyjść tylko w trybie normalnym
+    if(state != NORMAL)
+    {
+        print_warning("Didn't expect ERR_MSG now, ignoring");
+        return UNEXPECTED_MESSAGE;
+    }
+    state = EMERGENCY_2;
+    print_warning("Received ERR_MSG, switching mode to Emergency 2.");
+    return 0;
+}
+
+/**
+* @brief Przyjmij pakiet o rekonfiguracji i wykonaj odpowiednią akcję w zależności od stanu
+* @return 0 jeśli się udało, lub błąd, gdy inna liczba.
+*/
+static int take_reconf_msg()
+{
+    //przejście w rtyb konfiguracj, tylko w stanie normalnym
+    if(state != NORMAL)
+    {
+        print_warning("Didn't expect RECONF_MSG now, ignoring");
+        return UNEXPECTED_MESSAGE;
+    }
+    state = INITIALIZING;
+    print_info("Received RECONF_MSG, resetting and waiting for initial message.");
+    return 0;
+}
+
 int main(int argc, char const *argv[])
 {
     if(argc != 6)
@@ -301,17 +371,47 @@ int main(int argc, char const *argv[])
     ssize_t nread;
     unsigned char buf[BUF_SIZE];
     int s;
+    //czy był timeout gniazda
+    int no_timeout = 0;
     while(1)
     {
-        if(state == NORMAL)
+        if(state == NORMAL || state == STARTING_DATA)
         {
             //idziemy spać na odpowiedni czas
             print_info("Now going to sleep.");
             usleep(timeout * 1000);
             measure();
-            print_info("Just woke up and waiting for packet.");
+
+            if(state == NORMAL)
+            {
+                print_info("Just woke up and waiting for packet.");
+                //struktura do funkcji select
+                fd_set select_sockets;
+                //struktura od czasu
+                struct timeval socket_timeout;
+                //dodanie naszego deskryptora do gniazda
+                FD_ZERO(&select_sockets);
+                FD_SET(socket_prev, &select_sockets);
+                //ustawienie czasu
+                socket_timeout.tv_sec = timeout;
+                //tutaj czekamy na pakiet
+                no_timeout = select(socket_prev + 1, &select_sockets, NULL, NULL, &socket_timeout);
+            }
+            else
+            {
+                //na pewno ma rozpoczynać dane
+                init_data_msg();
+                continue;
+            }
         }
-        //odebranie pakietu
+        //sprawdzenie, czy jest timeout
+        if(!no_timeout)
+        {
+            print_warning("Timeout! Switching mode to Emergency 1.");
+            state = EMERGENCY_1;
+            continue;
+        }
+        //pakiet doszedł, możemy odczytać
         peer_addr_len = sizeof(struct sockaddr_storage);
         nread = recvfrom(socket_prev, buf, BUF_SIZE, 0, (struct sockaddr *) &peer_addr, &peer_addr_len);
         if (nread == -1)
@@ -337,7 +437,12 @@ int main(int argc, char const *argv[])
             case DATA_MSG:
                 take_data_msg(received_msg.data);
                 break;
-            //TODO case pozostałe:
+            case ERR_MSG:
+                take_error_msg();
+                break;
+            case RECONF_MSG:
+                take_reconf_msg();
+                break;
             default:
                 print_warning("Received unknown %ld bytes from %s:%s: %s\n", (long int) nread, host, service, buf);
             }
@@ -346,7 +451,7 @@ int main(int argc, char const *argv[])
         }
         else
         {
-            print_error("getnameinfo() failed");
+            print_error("getnameinfo() failed.");
         }
     }
 
