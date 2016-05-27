@@ -278,10 +278,12 @@ static void emergency1()
     }
     //wysyłamy ACK_MSG do następnika
     msg.type = ACK_MSG;
-    if(send_msg(NEXT, &msg) == 0) print_success("Sent ACK_MSG to next sensor.");
+    while(send_msg(NEXT, &msg) != 0);
+    print_success("Sent ACK_MSG to next sensor.");
     //wysyłamy ERR_MSG do poprzednika
     msg.type = ERR_MSG;
-    if(send_msg(PREV, &msg) == 0) print_success("Sent ERR_MSG to prevous sensor.");
+    while(send_msg(PREV, &msg) != 0);
+    print_success("Sent ERR_MSG to prevous sensor.");
     //czekamy na ACK_MSG od poprzednika
     print_info("Waiting for ACK_MSG from previous sensor...");
     while(1)
@@ -314,7 +316,8 @@ static void emergency1()
                 print_success("Received FINIT_MSG from previous sensor.");
                 //wysyłamy FINIT_MSG do następnika
                 msg.type = FINIT_MSG;
-                if(send_msg(NEXT, &msg) == 0) print_success("Sent FINIT_MSG to next sensor.");
+                while(send_msg(NEXT, &msg) != 0);
+                print_success("Sent FINIT_MSG to next sensor.");
                 print_info("Switching back to normal mode.");
                 state = NORMAL;
                 return;
@@ -326,7 +329,8 @@ static void emergency1()
             //był timeout
             //wysyłamy FINIT_MSG do następnika
             msg.type = FINIT_MSG;
-            if(send_msg(NEXT, &msg) == 0) print_success("Sent FINIT_MSG to next sensor.");
+            while(send_msg(NEXT, &msg) != 0);
+            print_success("Sent FINIT_MSG to next sensor.");
             print_info("Switching to data initialization mode.");
             state = STARTING_DATA;
             return;
@@ -339,10 +343,12 @@ static void emergency2()
     //ACK_MSG do poprzednika
     union msg msg;
     msg.type = ACK_MSG;
-    if(send_msg(PREV, &msg) == 0) print_success("Sent ACK_MSG to previous sensor.");
+    while(send_msg(PREV, &msg) != 0);
+    print_success("Sent ACK_MSG to previous sensor.");
     //ERR_MSG dalej do następnika
     msg.type = ERR_MSG;
-    if(send_msg(NEXT, &msg) == 0) print_success("Sent ERR_MSG to next sensor.");
+    while(send_msg(NEXT, &msg) != 0);
+    print_success("Sent ERR_MSG to next sensor.");
     //czekamy na ACK_MSG od następnika
     print_info("Waiting for ACK_MSG from next sensor...");
    while(1)
@@ -376,7 +382,8 @@ static void emergency2()
                 print_info("Rotating sensor 180°.");
                 //wysyłamy FINIT_MSG do nowego następnika
                 msg.type = FINIT_MSG;
-                if(send_msg(NEXT, &msg) == 0) print_success("Sent FINIT_MSG to next sensor.");
+                while(send_msg(NEXT, &msg) != 0);
+                print_success("Sent FINIT_MSG to next sensor.");
                 print_info("Switching back to normal mode");
                 state = NORMAL;
                 return;
@@ -390,7 +397,8 @@ static void emergency2()
             rotate180();
             //wysyłamy FINIT_MSG do nowego następnika
             msg.type = FINIT_MSG;
-            if(send_msg(NEXT, &msg) == 0) print_success("Sent FINIT_MSG to next sensor.");
+            while(send_msg(NEXT, &msg) != 0);
+            print_success("Sent FINIT_MSG to next sensor.");
             print_info("Switching to data initialization mode.");
             state = STARTING_DATA;
             return;
@@ -409,7 +417,7 @@ static void action()
     {
         if(state == INITIALIZING)
         {
-            print_success("Sensor %d now waiting for initialization.", sensor_id);
+            print_success("Sensor %d now waiting for initialization...", sensor_id);
             union msg received_msg;
             int msg_id = read_msg(PREV, &received_msg);
             if(msg_id == INIT_MSG)
@@ -449,6 +457,10 @@ static void action()
                     if(send_msg(NEXT, &received_msg) == 0)
                     {
                         print_success("Sent DATA_MSG to next sensor with new measurement %d.", get_measurement());
+                    }
+                    else
+                    {
+                        print_error("Failed to send DATA_MSG to next sensor.");
                     }
                     cleanup_msg(&received_msg);
                 }
