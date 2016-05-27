@@ -146,6 +146,11 @@ static void emergency1();
 static void emergency2();
 
 /**
+* @brief Obróć czujnik o 180° zamieniając poprzednika z następnikiem.
+*/
+static void rotate180();
+
+/**
 * @brief Wykonuj główną akcję w pętli.
 */
 static void action();

@@ -281,7 +281,7 @@ static void emergency1()
     if(send_msg(NEXT, &msg) == 0) print_success("Sent ACK_MSG to next sensor.");
     //wysyłamy ERR_MSG do poprzednika
     msg.type = ERR_MSG;
-    if(send_msg(PREV, &msg) == 0) print_success("Sent ERR_MSG to next sensor.");
+    if(send_msg(PREV, &msg) == 0) print_success("Sent ERR_MSG to prevous sensor.");
     //czekamy na ACK_MSG od poprzednika
     print_info("Waiting for ACK_MSG from previous sensor...");
     while(1)
@@ -315,7 +315,7 @@ static void emergency1()
                 //wysyłamy FINIT_MSG do następnika
                 msg.type = FINIT_MSG;
                 if(send_msg(NEXT, &msg) == 0) print_success("Sent FINIT_MSG to next sensor.");
-                print_info("Switching back to normal mode");
+                print_info("Switching back to normal mode.");
                 state = NORMAL;
                 return;
             }
@@ -327,7 +327,7 @@ static void emergency1()
             //wysyłamy FINIT_MSG do następnika
             msg.type = FINIT_MSG;
             if(send_msg(NEXT, &msg) == 0) print_success("Sent FINIT_MSG to next sensor.");
-            print_info("Switching to data initialization mode");
+            print_info("Switching to data initialization mode.");
             state = STARTING_DATA;
             return;
         }
@@ -336,7 +336,71 @@ static void emergency1()
 
 static void emergency2()
 {
-    //TODO
+    //ACK_MSG do poprzednika
+    union msg msg;
+    msg.type = ACK_MSG;
+    if(send_msg(PREV, &msg) == 0) print_success("Sent ACK_MSG to previous sensor.");
+    //ERR_MSG dalej do następnika
+    msg.type = ERR_MSG;
+    if(send_msg(NEXT, &msg) == 0) print_success("Sent ERR_MSG to next sensor.");
+    //czekamy na ACK_MSG od następnika
+    print_info("Waiting for ACK_MSG from next sensor...");
+   while(1)
+    {
+        if(wait_timeout_action(NEXT, NEIGHBOUR_TIMEOUT))
+        {
+            //odebraliśmy
+            int msg_id = read_msg(NEXT, &msg);
+            if(msg_id != ACK_MSG)
+            {
+                if(msg_id > 0) print_warning("Unexpected message, expected ACK_MSG. Ignoring.");
+                else print_error("Error receiving message, retrying.");
+                //możliwy pakiet z danymi, warto posprzątać
+                cleanup_msg(&msg);
+                continue;
+            }
+            print_success("Received ACK_MSG from next sensor.");
+            //czekamy na FINIT_MSG od następnika
+            print_info("Waiting for FINIT_MSG from next sensor...");
+            while(1)
+            {
+                msg_id = read_msg(NEXT, &msg);
+                if(msg_id != FINIT_MSG)
+                {
+                    if(msg_id > 0) print_warning("Unexpected message, expected FINIT_MSG. Ignoring.");
+                    else print_error("Error receiving message, retrying.");
+                    cleanup_msg(&msg);
+                    continue;
+                }
+                print_success("Received FINIT_MSG from next sensor.");
+                print_info("Rotating sensor 180°.");
+                //wysyłamy FINIT_MSG do nowego następnika
+                msg.type = FINIT_MSG;
+                if(send_msg(NEXT, &msg) == 0) print_success("Sent FINIT_MSG to next sensor.");
+                print_info("Switching back to normal mode");
+                state = NORMAL;
+                return;
+            }
+        }
+        else
+        {
+            //był timeout
+            print_warning("Timeout! Rotating sensor 180°.");
+            //obracamy czujnik
+            rotate180();
+            //wysyłamy FINIT_MSG do nowego następnika
+            msg.type = FINIT_MSG;
+            if(send_msg(NEXT, &msg) == 0) print_success("Sent FINIT_MSG to next sensor.");
+            print_info("Switching to data initialization mode.");
+            state = STARTING_DATA;
+            return;
+        }
+    }
+}
+
+static void rotate180()
+{
+    rotated180 = !rotated180;
 }
 
 static void action()
