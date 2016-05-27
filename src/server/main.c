@@ -30,6 +30,7 @@
 #define SERVER_TIMEOUT 1000 //ms
 #define ERROR_TIMEOUT 1000 //ms
 
+int resolving_error = 0;
 int mode = RING;
 int close_first = 0;
 int sock_first, sock_last;
@@ -66,10 +67,12 @@ void send_data_msg(int num)
 {
     int sockfd = sock_first;
     struct sockaddr_in addr = first_addr;
+    char* nums = "first";
     if(num == LAST)
     {
         sockfd = sock_last;
         addr = last_addr;
+        nums = "last";
     }
     union msg msg;
     msg.data.type = DATA_MSG;
@@ -88,7 +91,7 @@ void send_data_msg(int num)
         print_error("Failed to send data msg");
         exit(-1);
     }
-    print_info("Data message sent");
+    print_info("Data message sent to %s sensor", nums);
     free(buf);
 }
 
@@ -97,10 +100,12 @@ int send_error_msg(int num)
 {
     int sockfd = sock_first;
     struct sockaddr_in addr = first_addr;
+    char* nums = "first";
     if(num == LAST)
     {
         sockfd = sock_last;
         addr = last_addr;
+        nums = "last";
     }
     union msg msg;
     msg.info.type = ERR_MSG;
@@ -119,7 +124,7 @@ int send_error_msg(int num)
         free(buf);
         return -1;
     }
-    print_info("Error message sent");
+    print_info("Error message sent to %s sensor", nums);
     free(buf);
     return 0;
 }
@@ -158,34 +163,39 @@ int receive_ack_and_finit(int num)
 {
     int sockfd = sock_first;
     struct sockaddr_in addr = first_addr;
+    char* nums = "first";
     if(num == LAST)
     {
         sockfd = sock_last;
         addr = last_addr;
+        nums = "last";
     }
     unsigned char buf[MAX_DATA];
     unsigned addr_len = sizeof(addr);
-    print_info("Waiting for ack...");
+    print_info("Waiting for ack from %d...", num);
     int len = recvfrom(sockfd, buf, MAX_DATA, 0, (struct sockaddr*)&addr, &addr_len);
     union msg received_msg;
     int msg_type = unpack_msg(buf, &received_msg);
     if(len < 0 || msg_type != ACK_MSG)
     {
-        print_error("Failed to receive ack msg");
+        print_error("Failed to receive ack msg from %s sensor", nums);
+        print_info("Received %d type instead", msg_type);
         print_success("Closing socket");
         close(sockfd);
         return -1;
     }
-
+    print_success("Received ack msg from %d", num);
     len = recvfrom(sockfd, buf, MAX_DATA, 0, (struct sockaddr*)&addr, &addr_len);
     msg_type = unpack_msg(buf, &received_msg);
     if(len < 0 || msg_type != FINIT_MSG)
     {
-        print_error("Failed to receive finit msg");
+        print_error("Failed to receive finit msg from %s sensor", nums);
+        print_info("Received %d type instead", msg_type);
         print_success("Closing socket");
         close(sockfd);
         return -1;
     }
+    print_success("Received finit msg from %d", num);
     return 0;
 }
 
@@ -196,6 +206,11 @@ void* first_loop(void* arg)
     send_init_msg();
     while(1)
     {
+        if(resolving_error)
+        {
+            usleep(SERVER_TIMEOUT*1000);
+            continue;
+        }
         send_data_msg(FIRST);
         if(mode == DOUBLE_LIST)
         {
@@ -207,7 +222,7 @@ void* first_loop(void* arg)
             int len = recvfrom(sock_first, buf, MAX_DATA, 0, (struct sockaddr*)&first_addr, &first_addr_len);
             if(len < 0)
             {
-                print_error("Second problem with network, terminating....");
+                print_error("Second problem with network(not received msg from first sensor), terminating....");
                 exit(-1);
             }
             union msg received_msg;
@@ -235,6 +250,7 @@ void last_loop()
         if(len < 0)
         {
             mode = DOUBLE_LIST;
+            resolving_error = 1;
             print_warning("Didn't receive data message from last sensor");
             print_success("Mode changed to double-list");
             if(send_error_msg(FIRST) < 0 || receive_ack_and_finit(FIRST) < 0)
@@ -243,8 +259,10 @@ void last_loop()
             }
             if(send_error_msg(LAST) < 0 || receive_ack_and_finit(LAST) < 0)
             {
+                resolving_error = 0;
                 return;
             }
+            resolving_error = 0;
         }
         else
         {
