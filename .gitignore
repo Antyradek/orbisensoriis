@@ -1,2 +1,3 @@
 src/server/server
 src/sensor/sensor
+**/*.o

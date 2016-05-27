@@ -400,6 +400,7 @@ int main(int argc, char const *argv[])
     state = INITIALIZING;
     rotated180 = 0;
 
+    print_init();
     initilize_sockets();
     srand(sensor_id);
 

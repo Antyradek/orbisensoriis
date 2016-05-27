@@ -329,6 +329,7 @@ int initialize_thread()
 
 int main(int argc, char const *argv[])
 {
+    print_init();
     if(initialize_sockets() < 0)
     {
         return -1;
