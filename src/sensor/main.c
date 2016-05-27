@@ -466,7 +466,6 @@ static void action()
             sleep_action(period);
             measure();
             print_info("Waiting for DATA_MSG from previous sensor or timeout...");
-            print_info("Rotated: %d", rotated180);
             if(rotated180 || wait_timeout_action(PREV, timeout))
             {
                 union msg received_msg;
