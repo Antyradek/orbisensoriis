@@ -117,13 +117,8 @@ int send_error_msg(int num)
         exit(-1);
     }
     unsigned len = sizeof(addr);
-    if(sendto(sockfd, buf, buf_len, 0, (struct sockaddr* )&addr, len) < 0)
-    {
-        print_error("Failed to send error msg\nClosing socket");
-        close(sockfd);
-        free(buf);
-        return -1;
-    }
+    while(sendto(sockfd, buf, buf_len, 0, (struct sockaddr* )&addr, len) < 0);
+
     print_info("Error message sent to %s sensor", nums);
     free(buf);
     return 0;
@@ -173,7 +168,11 @@ int receive_ack_and_finit(int num)
     unsigned char buf[MAX_DATA];
     unsigned addr_len = sizeof(addr);
     print_info("Waiting for ack from %d...", num);
-    int len = recvfrom(sockfd, buf, MAX_DATA, 0, (struct sockaddr*)&addr, &addr_len);
+    int len = -1;
+    while(len < 0)
+    {
+        len = recvfrom(sockfd, buf, MAX_DATA, 0, (struct sockaddr*)&addr, &addr_len);
+    }
     union msg received_msg;
     int msg_type = unpack_msg(buf, &received_msg);
     if(len < 0 || msg_type != ACK_MSG)
