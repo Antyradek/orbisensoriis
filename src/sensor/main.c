@@ -1,56 +1,4 @@
-/**
-* 04.05.2016
-* @author Radosław Świątkiewicz
-*/
-#include <stdio.h>
-#include <sys/socket.h>
-#include <sys/types.h>
-#include <sys/select.h>
-#include <netinet/in.h>
-#include <netdb.h>
-#include <string.h>
-#include <stdlib.h>
-#include <unistd.h>
-
-#include "../protocol.h"
-#include "../helper.h"
-
-#define BUF_SIZE 512
-#define UNEXPECTED_MESSAGE -3
-
-//gniazda
-int socket_prev;
-int socket_next;
-//paramentry następnika
-const char* addr_next;
-const char* port_next;
-//paramentry poprzednika
-const char* addr_prev;
-const char* port_prev;
-//numer czujnika
-uint16_t sensor_id;
-//wartości do cyklu sennego
-int timeout;
-int period;
-//ostatni pomiar
-int last_measurement;
-
-//tryb pracy czujnika
-enum sensor_state
-{
-    //czujnik oczekuje na wiadomość inicjalizującą
-    INITIALIZING,
-    //rormalny tryb pracy
-    NORMAL,
-    //awaryjny 1 - za przerwaniem
-    EMERGENCY_1,
-    //awaryjny 2 - przed przerwaniem
-    EMERGENCY_2,
-    //czujnik rozpoczyna wiadomość z danymi
-    STARTING_DATA
-};
-
-enum sensor_state state;
+#include "main.h"
 
 /**
 * @brief Zainicjalizuj gniazda i podłącz się do nich.
@@ -345,6 +293,153 @@ static int take_reconf_msg()
     return 0;
 }
 
+static void sleep_action(int milliseconds)
+{
+    print_info("Now going to sleep.");
+    usleep(milliseconds * 1000);
+}
+
+static int get_socket(enum direction send_dir)
+{
+    if(!rotated180)
+    {
+        if(send_dir == NEXT)
+        {
+            return socket_next;
+        }
+        else if(send_dir == PREV)
+        {
+            return socket_prev;
+        }
+        else
+        {
+            return 0;
+        }
+    }
+    else
+    {
+        if(send_dir == NEXT)
+        {
+            return socket_prev;
+        }
+        else if(send_dir == PREV)
+        {
+            return socket_next;
+        }
+        else
+        {
+            return 0;
+        }
+    }
+}
+
+static int wait_timeout_action(enum direction send_dir, int milliseconds)
+{
+    //struktura do funkcji select
+    fd_set select_sockets;
+    //struktura od czasu
+    struct timeval socket_timeout;
+    //dodanie naszego deskryptora do gniazda
+    FD_ZERO(&select_sockets);
+    FD_SET(get_socket(send_dir), &select_sockets);
+    //ustawienie czasu
+    socket_timeout.tv_usec = milliseconds * 1000;
+    //tutaj czekamy na pakiet
+    no_timeout = select(get_socket(send_dir) + 1, &select_sockets, NULL, NULL, &socket_timeout);
+    return no_timeout;
+}
+
+static int read_socket(enum direction socket_dir, union msg* read_msg)
+{
+    struct sockaddr_storage peer_addr;
+    socklen_t peer_addr_len;
+    ssize_t nread;
+    unsigned char buf[BUF_SIZE];
+    int s;
+    peer_addr_len = sizeof(struct sockaddr_storage);
+    nread = recvfrom(get_socket(socket_dir), buf, BUF_SIZE, 0, (struct sockaddr *) &peer_addr, &peer_addr_len);
+    if (nread == -1)
+    {
+        print_info("Failed receive request.");
+        return -1;
+    }
+    //sprawdzenie nadawcy pakietu
+    char host[NI_MAXHOST], service[NI_MAXSERV];
+    s = getnameinfo((struct sockaddr *) &peer_addr, peer_addr_len, host, NI_MAXHOST, service, NI_MAXSERV, NI_NUMERICSERV);
+    if (s != 0)
+    {
+        print_error("getnameinfo() failed.");
+        return -2;
+    }
+    //UWAGA!!! Trzeba sprzątnąć po tej funkcji poniżej.
+    int msg_type = unpack_msg(buf, read_msg);
+    return msg_type;
+}
+
+static void action()
+{
+    while(1)
+    {
+        if(state == NORMAL)
+        {
+            sleep_action(period);
+            measure();
+            if(wait_timeout_action(PREV, timeout))
+            {
+                //TODO odebranie
+            }
+            else
+            {
+                print_warning("Timeout! Switching mode to Emergency 1.");
+                state = EMERGENCY_1;
+                continue;
+            }
+        }
+
+        if(state == NORMAL || state == STARTING_DATA)
+        {
+            //idziemy spać na odpowiedni czas
+            sleep_action(timeout);
+            measure();
+
+            if(state == NORMAL)
+            {
+                print_info("Just woke up and waiting for packet.");
+
+            }
+            else
+            {
+                //na pewno ma rozpoczynać dane
+                init_data_msg();
+                continue;
+            }
+        }
+
+    }
+}
+
+    //sprzątnięcie po rozpakowaniu
+    cleanup_msg(&received_msg);
+
+//akcja w zależności od wiadomości
+switch(msg_type)
+{
+case INIT_MSG:
+    take_init_msg(received_msg.init);
+    break;
+case DATA_MSG:
+    take_data_msg(received_msg.data);
+    break;
+case ERR_MSG:
+    take_error_msg();
+    break;
+case RECONF_MSG:
+    take_reconf_msg();
+    break;
+default:
+    print_warning("Received unknown %ld bytes from %s:%s: %s\n", (long int) nread, host, service, buf);
+}
+
 int main(int argc, char const *argv[])
 {
     if(argc != 6)
@@ -359,6 +454,7 @@ int main(int argc, char const *argv[])
     sensor_id = (uint16_t)atoi(argv[5]);
 
     state = INITIALIZING;
+    rotated180 = 0;
 
     initilize_sockets();
     srand(sensor_id);
@@ -366,93 +462,12 @@ int main(int argc, char const *argv[])
     print_success("Sensor %d now waiting for initialization.", sensor_id);
 
     //główna pętla
-    struct sockaddr_storage peer_addr;
-    socklen_t peer_addr_len;
-    ssize_t nread;
-    unsigned char buf[BUF_SIZE];
-    int s;
+
     //czy był timeout gniazda
     int no_timeout = 0;
     while(1)
     {
-        if(state == NORMAL || state == STARTING_DATA)
-        {
-            //idziemy spać na odpowiedni czas
-            print_info("Now going to sleep.");
-            usleep(timeout * 1000);
-            measure();
 
-            if(state == NORMAL)
-            {
-                print_info("Just woke up and waiting for packet.");
-                //struktura do funkcji select
-                fd_set select_sockets;
-                //struktura od czasu
-                struct timeval socket_timeout;
-                //dodanie naszego deskryptora do gniazda
-                FD_ZERO(&select_sockets);
-                FD_SET(socket_prev, &select_sockets);
-                //ustawienie czasu
-                socket_timeout.tv_sec = timeout;
-                //tutaj czekamy na pakiet
-                no_timeout = select(socket_prev + 1, &select_sockets, NULL, NULL, &socket_timeout);
-            }
-            else
-            {
-                //na pewno ma rozpoczynać dane
-                init_data_msg();
-                continue;
-            }
-        }
-        //sprawdzenie, czy jest timeout
-        if(!no_timeout)
-        {
-            print_warning("Timeout! Switching mode to Emergency 1.");
-            state = EMERGENCY_1;
-            continue;
-        }
-        //pakiet doszedł, możemy odczytać
-        peer_addr_len = sizeof(struct sockaddr_storage);
-        nread = recvfrom(socket_prev, buf, BUF_SIZE, 0, (struct sockaddr *) &peer_addr, &peer_addr_len);
-        if (nread == -1)
-        {
-            print_info("Failed receive request.");
-            continue;
-        }
-        //sprawdzenie nadawcy pakietu
-        char host[NI_MAXHOST], service[NI_MAXSERV];
-        s = getnameinfo((struct sockaddr *) &peer_addr, peer_addr_len, host, NI_MAXHOST, service, NI_MAXSERV, NI_NUMERICSERV);
-        if (s == 0)
-        {
-            //rozpakowanie wiadomości
-            union msg received_msg;
-            //UWAGA!!! Trzeba sprzątnąć po tej funkcji poniżej.
-            int msg_type = unpack_msg(buf, &received_msg);
-            //akcja w zależności od wiadomości
-            switch(msg_type)
-            {
-            case INIT_MSG:
-                take_init_msg(received_msg.init);
-                break;
-            case DATA_MSG:
-                take_data_msg(received_msg.data);
-                break;
-            case ERR_MSG:
-                take_error_msg();
-                break;
-            case RECONF_MSG:
-                take_reconf_msg();
-                break;
-            default:
-                print_warning("Received unknown %ld bytes from %s:%s: %s\n", (long int) nread, host, service, buf);
-            }
-            //sprzątnięcie po rozpakowaniu
-            cleanup_msg(&received_msg);
-        }
-        else
-        {
-            print_error("getnameinfo() failed.");
-        }
     }
 
 }
