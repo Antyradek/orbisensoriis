@@ -24,46 +24,51 @@
 int socket_prev;
 /** Gniazdo następnego czujnika. */
 int socket_next;
-//paramentry następnika
+/** Adres następnika. */
 const char* addr_next;
+/** Port następnika. */
 const char* port_next;
-//paramentry poprzednika
+/** Adres poprzednika. */
 const char* addr_prev;
+/** Port poprzednika. */
 const char* port_prev;
-//numer czujnika
+/** Identyfikator czujnika. */
 uint16_t sensor_id;
-//wartości do cyklu sennego
+/** Maksymalny czas oczekiwania na pakiet. */
 int timeout;
+/** Czas na jaki czujnik zasypia. */
 int period;
-//ostatni pomiar
+/** Ostatni pomiar. */
 int last_measurement;
 
-//tryb pracy czujnika
+/** Tryb pracy czujnika. */
 enum sensor_state
 {
-    //czujnik oczekuje na wiadomość inicjalizującą
+    /** Czujnik oczekuje na wiadomość inicjalizującą. */
     INITIALIZING,
-    //rormalny tryb pracy
+    /** Normalny tryb pracy. */
     NORMAL,
-    //awaryjny 1 - za przerwaniem
+    /** Awaryjny 1 - za przerwaniem. */
     EMERGENCY_1,
-    //awaryjny 2 - przed przerwaniem
+    /** Awaryjny 2 - przed przerwaniem. */
     EMERGENCY_2,
-    //czujnik rozpoczyna wiadomość z danymi
+    /** Czujnik rozpoczyna wiadomość z danymi. */
     STARTING_DATA
 };
 
+/** Kierunek wysyłania/odbierania wiadomości. */
 enum direction
 {
-    //czujnik na przedzie
+    /** Czujnik z przodu */
     NEXT,
-    //czujnik z tyłu
+    /** Czujnik z tyłu */
     PREV
 };
 
+/** Główny stan i tryb pracy czujnika */
 enum sensor_state state;
 
-//czy czujnik jest obrócony i ma zamienione sąsiednie czujniki
+/** Boolean - czy czujnik jest obrócony i ma zamieniony przód z tyłem */
 int rotated180;
 
 /**
@@ -79,23 +84,60 @@ static int initilize_sockets();
 static int get_measurement();
 
 /**
-* @brief Wykonaj i zapisz pomiar. Może być on pobrany za pomocą get_measurement().
+* @brief Wykonaj i zapisz pomiar. Może być on potem pobrany za pomocą get_measurement().
 */
 static void measure();
 
+/**
+* @brief Wypisz dane zawarte w pakiecie z danymi.
+* @param received_msg Pakiet z danymi do wypisania z niego danych.
+*/
 static void print_data(struct data_msg* received_msg);
 
+/**
+* @brief Dodaj nowy pomiar do podanego pakietu.
+* @param received_msg Pakiet z danymi do którego dopisujemy na koniec nowy pomiar.
+*/
 static void add_measurement(struct data_msg* base_msg);
 
+/**
+* @brief Wyślij pakiet w podanym kierunku.
+* @param send_dir Kierunek do którego wysyłamy pakiet.
+* @param msg Pakiet który wysyłamy.
+* @return 0 gdy się udało, lub kod błędu.
+*/
 static int send_msg(enum direction send_dir, union msg* msg);
 
+/**
+* @brief Zawieś wątek na określoną ilość milisekund.
+* @param milliseconds Czas na jaki ma zasnąć wątek.
+*/
 static void sleep_action(int milliseconds);
 
+/**
+* @brief Pobierz numer gniazda w zależności od kierunku w którym chcemy wysłać i tego, czy czujnik jest obrócony.
+* @param send_dir Kierunek do którego wysyłamy pakiet.
+* @return Identyfikator gniazda.
+*/
 static int get_actual_socket(enum direction send_dir);
 
+/**
+* @brief Czekaj na dane do pobrania z danego kierunku, ale tylko określoną ilość czasu.
+* @param send_dir Kierunek z którego czekamy na pakiet.
+* @param milliseconds Maksymalny czas, jaki czekamy na dane w milisekundach.
+* @return 0 gdy dane przyszły i czekają na odczyt, lub inna liczba gdy czas minął wcześniej.
+*/
 static int wait_timeout_action(enum direction send_dir, int milliseconds);
 
+/**
+* @brief Czytaj pakiet z określonego kierunku.
+* @param send_dir Kierunek z którego czytamy na pakiet.
+* @param read_msg Wskaźnik do którego wsadzimy odebrany pakiet. Po użyciu należy zwolnić pamięć za pomocą cleanup_msg().
+* @return 0 gdy dane udało się odczytać, lub inna liczba gdy nie.
+*/
 static int read_msg(enum direction socket_dir, union msg* read_msg);
 
-
+/**
+* @brief Wykonuj główną akcję w pętli.
+*/
 static void action();
