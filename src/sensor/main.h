@@ -43,6 +43,9 @@ int period;
 /** Ostatni pomiar. */
 int last_measurement;
 
+struct sockaddr_storage peer_addr;
+    socklen_t peer_addr_len;
+
 /** Tryb pracy czujnika. */
 enum sensor_state
 {
@@ -60,7 +63,7 @@ enum direction
     /** Czujnik z przodu */
     NEXT,
     /** Czujnik z tyłu */
-    PREV
+    PREV,
 };
 
 /** Główny stan i tryb pracy czujnika */

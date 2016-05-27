@@ -9,7 +9,7 @@ static int initilize_sockets()
     int sfd;
     //zmodyfikowany kod z przykładu w „man 3 getaddrinfo”
 
-    print_info("Now initializing socket to listen to previous sensor.");
+    print_info("Now initializing prev.");
     memset(&hints, 0, sizeof(struct addrinfo));
     //poprzedni, będzie użyty do bind
     hints.ai_flags = AI_PASSIVE;
@@ -24,12 +24,12 @@ static int initilize_sockets()
     hints.ai_addr = NULL;
     hints.ai_next = NULL;
     /* Ustawiamy adresy
-    * addr_prev - adres poprzednika.
+    * NULL - nie wiadomo, od kogo dostaniemy.
     * port_prev - nasz port na którym nasłuchujemy danych od następnego czujnika
     * next_hints - opis naszego gniazda
     * next_result - zwracana struktura z adresami
     */
-    addrinfo_out = getaddrinfo(addr_prev, port_prev, &hints, &result);
+    addrinfo_out = getaddrinfo(NULL, port_prev, &hints, &result);
     if(addrinfo_out != 0)
     {
         print_error("Failed to getaddrinfo()");
@@ -58,9 +58,9 @@ static int initilize_sockets()
     //cieknąca pamięć to zła rzecz
     freeaddrinfo(result);
     socket_prev = sfd;
-    print_success("Socket to previous sensor succeeded!");
+    print_success("Socket prev succeeded!");
 
-    print_info("Now initializing socket to send data to next sensor.");
+    print_info("Now initializing next.");
     memset(&hints, 0, sizeof(struct addrinfo));
     //nim łączymy się do następnika
     hints.ai_flags = 0;
@@ -102,7 +102,7 @@ static int initilize_sockets()
     }
     socket_next = sfd;
     freeaddrinfo(result);
-    print_success("Socket to next sensor succeeded!");
+    print_success("Socket next succeeded!");
 
     return 0;
 }
@@ -180,15 +180,14 @@ static int send_msg(enum direction send_dir, union msg* msg)
     }
     else
     {
-        //wysyłamy do poprzednika, a to dniazdo powstało za pomocą bind, zatem używamy send
-        if (send(socket_prev, buf, packed_msg_size, 0) != packed_msg_size)
+        //wysyłamy do poprzednika, a to dniazdo powstało za pomocą bind, zatem używamy sendto
+        if (sendto(socket_prev, buf, packed_msg_size, 0, (struct sockaddr *) &peer_addr, peer_addr_len) != packed_msg_size)
         {
-            //print_error("Failed to send message.");
+            print_error("Failed to send message.");
             return -2;
         }
         return 0;
     }
-
 }
 
 static void sleep_action(int milliseconds)
@@ -199,7 +198,7 @@ static void sleep_action(int milliseconds)
 
 static int get_actual_socket(enum direction send_dir)
 {
-    if(!rotated180)
+    if(rotated180 == 0)
     {
         if(send_dir == NEXT)
         {
@@ -208,10 +207,6 @@ static int get_actual_socket(enum direction send_dir)
         else if(send_dir == PREV)
         {
             return socket_prev;
-        }
-        else
-        {
-            return 0;
         }
     }
     else
@@ -224,11 +219,8 @@ static int get_actual_socket(enum direction send_dir)
         {
             return socket_next;
         }
-        else
-        {
-            return 0;
-        }
     }
+    return -1;
 }
 
 static int wait_timeout_action(enum direction send_dir, int milliseconds)
@@ -259,21 +251,20 @@ static int read_msg(enum direction socket_dir, union msg* read_msg)
         nread = read(socket_next, buf, BUF_SIZE);
         if (nread == -1)
         {
-            print_info("Failed to read data.");
+            print_error("Failed to read message.");
             return -1;
         }
     }
     else
     {
         //gniazdo bind, używamy recvfrom
-        nread = recv(socket_prev, buf, BUF_SIZE, 0);
+        nread = recvfrom(socket_prev, buf, BUF_SIZE, 0, (struct sockaddr *) &peer_addr, &peer_addr_len);
         if (nread == -1)
         {
-            print_info("Failed to receive message.");
+            print_error("Failed to receive message.");
             return -1;
         }
     }
-
     //UWAGA!!! Trzeba sprzątnąć po tej funkcji poniżej.
     int msg_type = unpack_msg(buf, read_msg);
     return msg_type;
@@ -401,6 +392,7 @@ static void emergency2()
                 }
                 print_success("Received FINIT_MSG from next sensor.");
                 print_info("Rotating sensor 180°.");
+                rotate180();
                 //wysyłamy FINIT_MSG do nowego następnika
                 msg.type = FINIT_MSG;
                 while(send_msg(NEXT, &msg) != 0);
@@ -429,7 +421,14 @@ static void emergency2()
 
 static void rotate180()
 {
-    rotated180 = !rotated180;
+    if(rotated180 == 0)
+    {
+        rotated180 = 1;
+    }
+    else
+    {
+        rotated180 = 0;
+    }
 }
 
 static void action()
@@ -467,7 +466,8 @@ static void action()
             sleep_action(period);
             measure();
             print_info("Waiting for DATA_MSG from previous sensor or timeout...");
-            if(wait_timeout_action(PREV, timeout))
+            print_info("Rotated: %d", rotated180);
+            if(rotated180 || wait_timeout_action(PREV, timeout))
             {
                 union msg received_msg;
                 int msg_id = read_msg(PREV, &received_msg);
