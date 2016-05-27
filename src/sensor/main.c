@@ -173,7 +173,7 @@ static int send_msg(enum direction send_dir, union msg* msg)
         //wysyłamy do następnika, to gniazdo powstało za pomocą connect, czyli używamy write
         if(write(socket_next, buf, packed_msg_size) != packed_msg_size)
         {
-            print_error("Failed to send message.");
+            print_error("Failed to write message.");
             return -2;
         }
         return 0;
@@ -181,9 +181,9 @@ static int send_msg(enum direction send_dir, union msg* msg)
     else
     {
         //wysyłamy do poprzednika, a to dniazdo powstało za pomocą bind, zatem używamy send
-        if (send(socket_next, buf, packed_msg_size, 0) != packed_msg_size)
+        if (send(socket_prev, buf, packed_msg_size, 0) != packed_msg_size)
         {
-            print_error("Failed to send message.");
+            //print_error("Failed to send message.");
             return -2;
         }
         return 0;
@@ -499,7 +499,7 @@ static void action()
                 }
                 else
                 {
-                    print_warning("Unexpected message, expected DATA_MSG, ERR_MSG or RECONF_MSG. Ignoring.");
+                    print_warning("Unexpected message, expected DATA_MSG, ERR_MSG or RECONF_MSG, but got %d. Ignoring.", msg_id);
                 }
             }
             else
