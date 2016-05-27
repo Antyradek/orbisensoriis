@@ -9,7 +9,7 @@ static int initilize_sockets()
     int sfd;
     //zmodyfikowany kod z przykładu w „man 3 getaddrinfo”
 
-    print_info("Now initializing next in.");
+    print_info("Now initializing prev.");
     memset(&hints, 0, sizeof(struct addrinfo));
     //poprzedni, będzie użyty do bind
     hints.ai_flags = AI_PASSIVE;
@@ -29,51 +29,6 @@ static int initilize_sockets()
     * next_hints - opis naszego gniazda
     * next_result - zwracana struktura z adresami
     */
-    addrinfo_out = getaddrinfo(NULL, port_next, &hints, &result);
-    if(addrinfo_out != 0)
-    {
-        print_error("Failed to getaddrinfo()");
-        return addrinfo_out;
-    }
-    //mamy listę jednokierunkową kilku adresów, sprawdzamy po kolei
-    for (rp = result; rp != NULL; rp = rp -> ai_next)
-    {
-        sfd = socket(rp -> ai_family, rp -> ai_socktype, rp -> ai_protocol);
-        if (sfd == -1)
-        {
-            print_info("One address failed.");
-            continue;
-        }
-        if (bind(sfd, rp -> ai_addr, rp -> ai_addrlen) == 0)
-        {
-            break;
-        }
-        close(sfd);
-    }
-    if (rp == NULL)
-    {
-        print_error("Could not bind.");
-        return -1;
-    }
-    //cieknąca pamięć to zła rzecz
-    freeaddrinfo(result);
-    socket_next_in = sfd;
-    print_success("Socket next in succeeded!");
-
-    print_info("Now initializing prev in.");
-    memset(&hints, 0, sizeof(struct addrinfo));
-    //poprzedni, będzie użyty do bind
-    hints.ai_flags = AI_PASSIVE;
-    //tylko ipv4
-    hints.ai_family = AF_INET;
-    //datagramowy
-    hints.ai_socktype = SOCK_DGRAM;
-    //dowolny protokół
-    hints.ai_protocol = 0;
-    //pozostałe są zwracane przez getaddrinfo
-    hints.ai_canonname = NULL;
-    hints.ai_addr = NULL;
-    hints.ai_next = NULL;
     addrinfo_out = getaddrinfo(NULL, port_prev, &hints, &result);
     if(addrinfo_out != 0)
     {
@@ -102,10 +57,10 @@ static int initilize_sockets()
     }
     //cieknąca pamięć to zła rzecz
     freeaddrinfo(result);
-    socket_prev_in = sfd;
-    print_success("Socket prev in succeeded!");
+    socket_prev = sfd;
+    print_success("Socket prev succeeded!");
 
-    print_info("Now initializing next out.");
+    print_info("Now initializing next.");
     memset(&hints, 0, sizeof(struct addrinfo));
     //nim łączymy się do następnika
     hints.ai_flags = 0;
@@ -145,53 +100,9 @@ static int initilize_sockets()
         print_error("Could not connect.");
         return -1;
     }
-    socket_next_out = sfd;
+    socket_next = sfd;
     freeaddrinfo(result);
-    print_success("Socket next out succeeded!");
-
-    print_info("Now initializing prev out.");
-    memset(&hints, 0, sizeof(struct addrinfo));
-    //nim łączymy się do następnika
-    hints.ai_flags = 0;
-    //tylko ipv4
-    hints.ai_family = AF_INET;
-    //datagramowy
-    hints.ai_socktype = SOCK_DGRAM;
-    //dowolny protokół
-    hints.ai_protocol = 0;
-    //pozostałe są zwracane przez getaddrinfo
-    hints.ai_canonname = NULL;
-    hints.ai_addr = NULL;
-    hints.ai_next = NULL;
-
-    addrinfo_out = getaddrinfo(addr_prev, port_prev, &hints, &result);
-    if(addrinfo_out != 0)
-    {
-        print_error("Failed to getaddrinfo()");
-        return addrinfo_out;
-    }
-    for (rp = result; rp != NULL; rp = rp -> ai_next)
-    {
-        sfd = socket(rp -> ai_family, rp -> ai_socktype, rp -> ai_protocol);
-        if (sfd == -1)
-        {
-            print_info("One address failed.");
-            continue;
-        }
-        if (connect(sfd, rp -> ai_addr, rp -> ai_addrlen) == 0)
-        {
-            break;
-        }
-        close(sfd);
-    }
-    if (rp == NULL)
-    {
-        print_error("Could not connect.");
-        return -1;
-    }
-    socket_prev_out = sfd;
-    freeaddrinfo(result);
-    print_success("Socket prev out succeeded!");
+    print_success("Socket next succeeded!");
 
     return 0;
 }
@@ -241,6 +152,7 @@ static void add_measurement(struct data_msg* base_msg)
 
 static int send_msg(enum direction send_dir, union msg* msg)
 {
+    int send_socket = get_actual_socket(send_dir);
     //pakowanie
     int extra_size = 0;
     if(msg -> type == DATA_MSG)
@@ -256,12 +168,26 @@ static int send_msg(enum direction send_dir, union msg* msg)
         return -1;
     }
     //wysyłanie
-    if(write(get_actual_socket(send_dir, OUT), buf, packed_msg_size) != packed_msg_size)
+    if(send_socket == socket_next)
     {
-        print_error("Failed to write message.");
-        return -2;
+        //wysyłamy do następnika, to gniazdo powstało za pomocą connect, czyli używamy write
+        if(write(socket_next, buf, packed_msg_size) != packed_msg_size)
+        {
+            print_error("Failed to write message.");
+            return -2;
+        }
+        return 0;
     }
-    return 0;
+    else
+    {
+        //wysyłamy do poprzednika, a to dniazdo powstało za pomocą bind, zatem używamy sendto
+        if (sendto(socket_prev, buf, packed_msg_size, 0, (struct sockaddr *) &peer_addr, peer_addr_len) != packed_msg_size)
+        {
+            print_error("Failed to send message.");
+            return -2;
+        }
+        return 0;
+    }
 }
 
 static void sleep_action(int milliseconds)
@@ -270,32 +196,28 @@ static void sleep_action(int milliseconds)
     usleep(milliseconds * 1000);
 }
 
-static int get_actual_socket(enum direction send_dir, enum socket_action act)
+static int get_actual_socket(enum direction send_dir)
 {
-    if(!rotated180)
+    if(rotated180 == 0)
     {
         if(send_dir == NEXT)
         {
-            if(act == OUT) return socket_next_out;
-            if(act == IN) return socket_next_in;
+            return socket_next;
         }
         else if(send_dir == PREV)
         {
-            if(act == OUT) return socket_prev_out;
-            if(act == IN) return socket_prev_in;
+            return socket_prev;
         }
     }
     else
     {
         if(send_dir == NEXT)
         {
-            if(act == OUT) return socket_prev_out;
-            if(act == IN) return socket_prev_in;
+            return socket_prev;
         }
         else if(send_dir == PREV)
         {
-            if(act == OUT) return socket_next_out;
-            if(act == IN) return socket_next_in;
+            return socket_next;
         }
     }
     return -1;
@@ -309,25 +231,39 @@ static int wait_timeout_action(enum direction send_dir, int milliseconds)
     struct timeval socket_timeout;
     //dodanie naszego deskryptora do gniazda
     FD_ZERO(&select_sockets);
-    FD_SET(get_actual_socket(send_dir, IN), &select_sockets);
+    FD_SET(get_actual_socket(send_dir), &select_sockets);
     //ustawienie czasu
     socket_timeout.tv_sec = 0;
     socket_timeout.tv_usec = milliseconds * 1000;
     //tutaj czekamy na pakiet
-    int no_timeout = select(get_actual_socket(send_dir, IN) + 1, &select_sockets, NULL, NULL, &socket_timeout);
+    int no_timeout = select(get_actual_socket(send_dir) + 1, &select_sockets, NULL, NULL, &socket_timeout);
     return no_timeout;
 }
 
 static int read_msg(enum direction socket_dir, union msg* read_msg)
 {
+    int read_socket = get_actual_socket(socket_dir);
     ssize_t nread;
     unsigned char buf[BUF_SIZE];
-    //gniazdo bind, używamy recv
-    nread = recv(get_actual_socket(socket_dir, IN), buf, BUF_SIZE, 0);
-    if (nread == -1)
+    if(read_socket == socket_next)
     {
-        print_info("Failed to receive message.");
-        return -1;
+        //gniazdo connect, używamy write
+        nread = read(socket_next, buf, BUF_SIZE);
+        if (nread == -1)
+        {
+            print_error("Failed to read message.");
+            return -1;
+        }
+    }
+    else
+    {
+        //gniazdo bind, używamy recvfrom
+        nread = recvfrom(socket_prev, buf, BUF_SIZE, 0, (struct sockaddr *) &peer_addr, &peer_addr_len);
+        if (nread == -1)
+        {
+            print_error("Failed to receive message.");
+            return -1;
+        }
     }
     //UWAGA!!! Trzeba sprzątnąć po tej funkcji poniżej.
     int msg_type = unpack_msg(buf, read_msg);
@@ -456,6 +392,7 @@ static void emergency2()
                 }
                 print_success("Received FINIT_MSG from next sensor.");
                 print_info("Rotating sensor 180°.");
+                rotate180();
                 //wysyłamy FINIT_MSG do nowego następnika
                 msg.type = FINIT_MSG;
                 while(send_msg(NEXT, &msg) != 0);
@@ -484,7 +421,14 @@ static void emergency2()
 
 static void rotate180()
 {
-    rotated180 = !rotated180;
+    if(rotated180 == 0)
+    {
+        rotated180 = 1;
+    }
+    else
+    {
+        rotated180 = 0;
+    }
 }
 
 static void action()
@@ -522,7 +466,8 @@ static void action()
             sleep_action(period);
             measure();
             print_info("Waiting for DATA_MSG from previous sensor or timeout...");
-            if(wait_timeout_action(PREV, timeout))
+            print_info("Rotated: %d", rotated180);
+            if(rotated180 || wait_timeout_action(PREV, timeout))
             {
                 union msg received_msg;
                 int msg_id = read_msg(PREV, &received_msg);

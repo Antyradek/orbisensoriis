@@ -23,11 +23,9 @@
 #define NEIGHBOUR_TIMEOUT 500
 
 /** Gniazdo poprzedniego czujnika. */
-int socket_prev_in;
-int socket_prev_out;
+int socket_prev;
 /** Gniazdo następnego czujnika. */
-int socket_next_in;
-int socket_next_out;
+int socket_next;
 /** Adres następnika. */
 const char* addr_next;
 /** Port następnika. */
@@ -44,6 +42,9 @@ int timeout;
 int period;
 /** Ostatni pomiar. */
 int last_measurement;
+
+struct sockaddr_storage peer_addr;
+    socklen_t peer_addr_len;
 
 /** Tryb pracy czujnika. */
 enum sensor_state
@@ -63,12 +64,6 @@ enum direction
     NEXT,
     /** Czujnik z tyłu */
     PREV,
-};
-
-enum socket_action
-{
-    OUT,
-    IN
 };
 
 /** Główny stan i tryb pracy czujnika */
@@ -125,7 +120,7 @@ static void sleep_action(int milliseconds);
 * @param send_dir Kierunek do którego wysyłamy pakiet.
 * @return Identyfikator gniazda.
 */
-static int get_actual_socket(enum direction send_dir, enum socket_action act);
+static int get_actual_socket(enum direction send_dir);
 
 /**
 * @brief Czekaj na dane do pobrania z danego kierunku, ale tylko określoną ilość czasu.
