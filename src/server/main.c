@@ -311,6 +311,11 @@ void initilize_sockaddr()
     last_addr.sin_port = htons(PORT_LAST);
 
     struct hostent *hostinfo = gethostbyname(FIRST_NAME);
+    if(hostinfo == NULL)
+    {
+        print_error("Failed to gethostbyname, terminating...");
+        exit(-1);
+    }
     first_addr.sin_family = AF_INET;
     first_addr.sin_addr = *(struct in_addr *)hostinfo->h_addr;
     first_addr.sin_port = htons(PORT_FIRST);
