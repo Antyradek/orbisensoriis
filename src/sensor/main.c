@@ -9,9 +9,9 @@ static int initilize_sockets()
     int sfd;
     //zmodyfikowany kod z przykładu w „man 3 getaddrinfo”
 
-    print_info("Now initializing passive socket to listen to previous sensor.");
+    print_info("Now initializing socket to listen to previous sensor.");
     memset(&hints, 0, sizeof(struct addrinfo));
-    //pasywny, do niego się łączymy, będzie użyty do bind
+    //poprzedni, będzie użyty do bind
     hints.ai_flags = AI_PASSIVE;
     //tylko ipv4
     hints.ai_family = AF_INET;
@@ -24,12 +24,12 @@ static int initilize_sockets()
     hints.ai_addr = NULL;
     hints.ai_next = NULL;
     /* Ustawiamy adresy
-    * NULL - gniazdo pasywne, nie łączymy się nim na żadny adres.
-    * port_in_from_next - nasz port na którym nasłuchujemy danych od następnego czujnika
+    * addr_prev - adres poprzednika.
+    * port_prev - nasz port na którym nasłuchujemy danych od następnego czujnika
     * next_hints - opis naszego gniazda
     * next_result - zwracana struktura z adresami
     */
-    addrinfo_out = getaddrinfo(NULL, port_prev, &hints, &result);
+    addrinfo_out = getaddrinfo(addr_prev, port_prev, &hints, &result);
     if(addrinfo_out != 0)
     {
         print_error("Failed to getaddrinfo()");
@@ -60,9 +60,9 @@ static int initilize_sockets()
     socket_prev = sfd;
     print_success("Socket to previous sensor succeeded!");
 
-    print_info("Now initializing active socket to send data to next sensor.");
+    print_info("Now initializing socket to send data to next sensor.");
     memset(&hints, 0, sizeof(struct addrinfo));
-    //aktywny, nim łączymy się do następnika
+    //nim łączymy się do następnika
     hints.ai_flags = 0;
     //tylko ipv4
     hints.ai_family = AF_INET;
@@ -152,26 +152,43 @@ static void add_measurement(struct data_msg* base_msg)
 
 static int send_msg(enum direction send_dir, union msg* msg)
 {
+    int send_socket = get_actual_socket(send_dir);
+    //pakowanie
     int extra_size = 0;
     if(msg -> type == DATA_MSG)
     {
         extra_size = msg -> data.count * sizeof(struct data_t);
     }
     int buf_len = sizeof(msg) + extra_size;
-
     unsigned char buf[buf_len];
     int packed_msg_size = pack_msg(msg, buf, buf_len);
     if(packed_msg_size < 0)
     {
-        print_error("Failed to pack data msg");
+        print_error("Failed to pack data msg.");
         return -1;
     }
-    if(write(get_actual_socket(send_dir), buf, packed_msg_size) != packed_msg_size)
+    //wysyłanie
+    if(send_socket == socket_next)
     {
-        print_error("Failed to send data msg");
-        return -2;
+        //wysyłamy do następnika, to gniazdo powstało za pomocą connect, czyli używamy write
+        if(write(socket_next, buf, packed_msg_size) != packed_msg_size)
+        {
+            print_error("Failed to send message.");
+            return -2;
+        }
+        return 0;
     }
-    return 0;
+    else
+    {
+        //wysyłamy do poprzednika, a to dniazdo powstało za pomocą bind, zatem używamy send
+        if (send(socket_next, buf, packed_msg_size, 0) != packed_msg_size)
+        {
+            print_error("Failed to send message.");
+            return -2;
+        }
+        return 0;
+    }
+
 }
 
 static void sleep_action(int milliseconds)
@@ -233,26 +250,30 @@ static int wait_timeout_action(enum direction send_dir, int milliseconds)
 
 static int read_msg(enum direction socket_dir, union msg* read_msg)
 {
-    struct sockaddr_storage peer_addr;
-    socklen_t peer_addr_len;
+    int read_socket = get_actual_socket(socket_dir);
     ssize_t nread;
     unsigned char buf[BUF_SIZE];
-    int s;
-    peer_addr_len = sizeof(struct sockaddr_storage);
-    nread = recvfrom(get_actual_socket(socket_dir), buf, BUF_SIZE, 0, (struct sockaddr *) &peer_addr, &peer_addr_len);
-    if (nread == -1)
+    if(read_socket == socket_next)
     {
-        print_info("Failed receive request.");
-        return -1;
+        //gniazdo connect, używamy write
+        nread = read(socket_next, buf, BUF_SIZE);
+        if (nread == -1)
+        {
+            print_info("Failed to read data.");
+            return -1;
+        }
     }
-    //sprawdzenie nadawcy pakietu
-    char host[NI_MAXHOST], service[NI_MAXSERV];
-    s = getnameinfo((struct sockaddr *) &peer_addr, peer_addr_len, host, NI_MAXHOST, service, NI_MAXSERV, NI_NUMERICSERV);
-    if (s != 0)
+    else
     {
-        print_error("getnameinfo() failed.");
-        return -2;
+        //gniazdo bind, używamy recvfrom
+        nread = recv(socket_prev, buf, BUF_SIZE, 0);
+        if (nread == -1)
+        {
+            print_info("Failed to receive message.");
+            return -1;
+        }
     }
+
     //UWAGA!!! Trzeba sprzątnąć po tej funkcji poniżej.
     int msg_type = unpack_msg(buf, read_msg);
     return msg_type;
@@ -351,7 +372,7 @@ static void emergency2()
     print_success("Sent ERR_MSG to next sensor.");
     //czekamy na ACK_MSG od następnika
     print_info("Waiting for ACK_MSG from next sensor...");
-   while(1)
+    while(1)
     {
         if(wait_timeout_action(NEXT, NEIGHBOUR_TIMEOUT))
         {
@@ -432,7 +453,7 @@ static void action()
                 }
                 else
                 {
-                    print_error("Failed to send INIT_MSG to next senosr. Retrying.");
+                    print_error("Failed to send INIT_MSG to next sensor. Retrying.");
                 }
             }
             else
