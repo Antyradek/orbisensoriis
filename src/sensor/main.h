@@ -17,8 +17,10 @@
 #include "../protocol.h"
 #include "../helper.h"
 
+/** Bufor pakietu wiadomości */
 #define BUF_SIZE 512
-#define UNEXPECTED_MESSAGE -3
+/** Maksymalne oczekiwanie na sąsiadujący czujnik */
+#define NEIGHBOUR_TIMEOUT 500
 
 /** Gniazdo poprzedniego czujnika. */
 int socket_prev;
@@ -48,10 +50,6 @@ enum sensor_state
     INITIALIZING,
     /** Normalny tryb pracy. */
     NORMAL,
-    /** Awaryjny 1 - za przerwaniem. */
-    EMERGENCY_1,
-    /** Awaryjny 2 - przed przerwaniem. */
-    EMERGENCY_2,
     /** Czujnik rozpoczyna wiadomość z danymi. */
     STARTING_DATA
 };
@@ -136,6 +134,21 @@ static int wait_timeout_action(enum direction send_dir, int milliseconds);
 * @return 0 gdy dane udało się odczytać, lub inna liczba gdy nie.
 */
 static int read_msg(enum direction socket_dir, union msg* read_msg);
+
+/**
+* @brief Wykonaj wszystkie akcje 1 trybu awaryjnego.
+*/
+static void emergency1();
+
+/**
+* @brief Wykonaj wszystkie akcje 2 trybu awaryjnego.
+*/
+static void emergency2();
+
+/**
+* @brief Obróć czujnik o 180° zamieniając poprzednika z następnikiem.
+*/
+static void rotate180();
 
 /**
 * @brief Wykonuj główną akcję w pętli.
