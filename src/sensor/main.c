@@ -9,7 +9,7 @@ static int initilize_sockets()
     int sfd;
     //zmodyfikowany kod z przykładu w „man 3 getaddrinfo”
 
-    print_info("Now initializing passive socket to listen to previous sensor...");
+    print_info("Now initializing passive socket to listen to previous sensor.");
     memset(&hints, 0, sizeof(struct addrinfo));
     //pasywny, do niego się łączymy, będzie użyty do bind
     hints.ai_flags = AI_PASSIVE;
@@ -60,7 +60,7 @@ static int initilize_sockets()
     socket_prev = sfd;
     print_success("Socket to previous sensor succeeded!");
 
-    print_info("Now initializing active socket to send data to next sensor...");
+    print_info("Now initializing active socket to send data to next sensor.");
     memset(&hints, 0, sizeof(struct addrinfo));
     //aktywny, nim łączymy się do następnika
     hints.ai_flags = 0;
@@ -174,45 +174,9 @@ static int send_msg(enum direction send_dir, union msg* msg)
     return 0;
 }
 
-
-/**
-* @brief Wyślij pakiet ze swoją daną do następnika
-* @return 0 jeśli się udało, lub błąd, gdy inna liczba.
-*/
-static int init_data_msg()
-{
-    uint32_t new_measure = get_measurement();
-
-    //rezerwacja pamięci
-    struct data_t all_data[sizeof(struct data_t)];
-    all_data[0].id = sensor_id;
-    all_data[0].data = new_measure;
-
-    //wysyłanie wiadomości do kolejnego czujnika
-    union msg msg;
-    msg.data.type = DATA_MSG;
-    msg.data.count = 1;
-    msg.data.data = all_data;
-    int buf_len = sizeof(msg.data) + sizeof(all_data);
-    unsigned char buf[buf_len];
-    int packed_msg_size = pack_msg(&msg, buf, buf_len);
-    if(packed_msg_size < 0)
-    {
-        print_error("Failed to pack data msg");
-        return -1;
-    }
-    if(write(socket_next, buf, packed_msg_size) != packed_msg_size)
-    {
-        print_error("Failed to send data msg");
-        return -2;
-    }
-    print_success("Sent Data Message to next sensor with first measurement %d", new_measure);
-    return 0;
-}
-
 static void sleep_action(int milliseconds)
 {
-    print_info("Now going to sleep.");
+    print_info("Now going to sleep for %d ms...", milliseconds);
     usleep(milliseconds * 1000);
 }
 
@@ -296,7 +260,7 @@ static int read_msg(enum direction socket_dir, union msg* read_msg)
 
 static void emergency1()
 {
-    print_info("Waiting for ERR_MSG from next sensor.");
+    print_info("Waiting for ERR_MSG from next sensor...");
     union msg msg;
     //czekamy na ERR_MSG
     while(1)
@@ -319,7 +283,7 @@ static void emergency1()
     msg.type = ERR_MSG;
     if(send_msg(PREV, &msg) == 0) print_success("Sent ERR_MSG to next sensor.");
     //czekamy na ACK_MSG od poprzednika
-    print_info("Waiting for ACK_MSG from previous sensor.");
+    print_info("Waiting for ACK_MSG from previous sensor...");
     while(1)
     {
         if(wait_timeout_action(PREV, NEIGHBOUR_TIMEOUT))
@@ -336,7 +300,7 @@ static void emergency1()
             }
             print_success("Received ACK_MSG from previous sensor.");
             //czekamy na FINIT od poprzednika
-            print_info("Waiting for FINIT_MSG from previous sensor.");
+            print_info("Waiting for FINIT_MSG from previous sensor...");
             while(1)
             {
                 msg_id = read_msg(PREV, &msg);
@@ -388,11 +352,15 @@ static void action()
             {
                 timeout = received_msg.init.timeout;
                 period = received_msg.init.period;
-                print_success("Received Initial Message with timeout %d and period %d", timeout, period);
+                print_success("Received INIT_MSG with timeout %d and period %d.", timeout, period);
                 if(send_msg(NEXT, &received_msg) == 0)
                 {
-                    print_success("Sent Initial message to next sensor");
+                    print_success("Sent INIT_MSG to next sensor");
                     state = NORMAL;
+                }
+                else
+                {
+                    print_error("Failed to send INIT_MSG to next senosr. Retrying.");
                 }
             }
             else
@@ -405,6 +373,7 @@ static void action()
         {
             sleep_action(period);
             measure();
+            print_info("Waiting for DATA_MSG from previous sensor or timeout...");
             if(wait_timeout_action(PREV, timeout))
             {
                 union msg received_msg;
@@ -415,7 +384,7 @@ static void action()
                     add_measurement(&received_msg.data);
                     if(send_msg(NEXT, &received_msg) == 0)
                     {
-                        print_success("Sent Data Message to next sensor with new measurement %d", get_measurement());
+                        print_success("Sent DATA_MSG to next sensor with new measurement %d.", get_measurement());
                     }
                     cleanup_msg(&received_msg);
                 }
@@ -435,13 +404,31 @@ static void action()
                 {
                     print_warning("Unexpected message, expected DATA_MSG, ERR_MSG or RECONF_MSG. Ignoring.");
                 }
-                cleanup_msg(&received_msg);
             }
             else
             {
                 print_warning("Timeout! Executing Emergency 1 actions.");
                 emergency1();
                 continue;
+            }
+        }
+        else if(state == STARTING_DATA)
+        {
+            sleep_action(period);
+            measure();
+            union msg msg;
+            msg.type = DATA_MSG;
+            msg.data.count = 0;
+            msg.data.type = DATA_MSG;
+            msg.data.data = NULL;
+            add_measurement(&msg.data);
+            if(send_msg(NEXT, &msg) == 0)
+            {
+                print_success("Initialized and sent DATA_MSG to next sensor with measurement %d.", get_measurement());
+            }
+            else
+            {
+                print_error("Failed to send DATA_MSG to next sensor.");
             }
         }
     }
