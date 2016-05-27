@@ -1,0 +1,32 @@
+#!/bin/bash
+# skrypt do uruchamiania serwera i czujników w automagiczny sposób
+SERVER=./src/server/server
+SENSOR=./src/sensor/sensor
+TERMINAL=konsole
+TERMINAL_ARG="--hold -e"
+SERVER_OUT_PORT=4001
+SERVER_IN_PORT=4444
+SENSOR_STARTING_PORT=6000
+SENSOR_STARTING_ID=1000
+HOST=localhost
+COUNT=3
+
+echo Starting first sensor
+$TERMINAL $TERMINAL_ARG $SENSOR $HOST $SERVER_OUT_PORT $HOST $SENSOR_STARTING_PORT $SENSOR_STARTING_ID &
+
+I=0
+while [ $I -lt $COUNT ]
+do
+	sleep 2
+	echo Starting $I sensor
+	$TERMINAL $TERMINAL_ARG $SENSOR $HOST $(($SENSOR_STARTING_PORT + $I)) $HOST $(($SENSOR_STARTING_PORT + $I + 1)) $(($SENSOR_STARTING_ID + $I + 1)) &
+	I=$(( $I + 1 ))
+done
+
+sleep 2
+echo Starting last sensor
+$TERMINAL $TERMINAL_ARG $SENSOR $HOST $(($SENSOR_STARTING_PORT + $I)) $HOST $SERVER_IN_PORT $(($SENSOR_STARTING_ID + $I + 1)) &
+
+sleep 2
+echo Starting server
+$TERMINAL $TERMINAL_ARG $SERVER &
