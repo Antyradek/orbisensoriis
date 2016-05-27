@@ -294,6 +294,7 @@ static int wait_timeout_action(enum direction send_dir, int milliseconds)
     FD_ZERO(&select_sockets);
     FD_SET(get_actual_socket(send_dir), &select_sockets);
     //ustawienie czasu
+    socket_timeout.tv_sec = 0;
     socket_timeout.tv_usec = milliseconds * 1000;
     //tutaj czekamy na pakiet
     int no_timeout = select(get_actual_socket(send_dir) + 1, &select_sockets, NULL, NULL, &socket_timeout);
@@ -370,7 +371,22 @@ static void action()
                         print_success("Sent Data Message to next sensor with new measurement %d", get_measurement());
                     }
                 }
-                //TODO else
+                else if(msg_id == ERR_MSG)
+                {
+                    print_warning("Received ERR_MSG. Switching mode to Emergency 2");
+                    state = EMERGENCY_2;
+                    continue;
+                }
+                else if(msg_id == RECONF_MSG)
+                {
+                    print_info("Switched to Reconfigation mode.");
+                    state = INITIALIZING;
+                    continue;
+                }
+                else
+                {
+                    print_warning("Unexpected message. Ignoring.");
+                }
                 cleanup_msg(&received_msg);
             }
             else
