@@ -74,7 +74,7 @@ def test_normal():
             line = server_fifo.readline()
             tokens = line.split(' ')
             sensor_no = int(tokens[2])
-            received[sensor_no] = int(tokens[4]) + 1
+            received[sensor_no] = int(tokens[4])
 
         if received == measurements:
             print('[+] Success!')
