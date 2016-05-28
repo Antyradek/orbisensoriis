@@ -1,6 +1,13 @@
+/**
+ * packing-test.c
+ * Paweł Szewczyk
+ * 2016-04-26
+ */
+
 #include <assert.h>
 #include <time.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 #include "protocol.h"
 
@@ -47,14 +54,44 @@ void test_data() {
 	cleanup_msg(&out);
 }
 
+void test_info() {
+	struct info_msg in;
+	union msg out;
+	unsigned char buf[16];
+
+        in.type = ERR_MSG;
+	pack_msg(&in, buf, 16);
+	unpack_msg(buf, &out);
+	assert(in.type == out.info.type);
+
+        in.type = ACK_MSG;
+	pack_msg(&in, buf, 16);
+	unpack_msg(buf, &out);
+	assert(in.type == out.info.type);
+
+        in.type = FINIT_MSG;
+	pack_msg(&in, buf, 16);
+	unpack_msg(buf, &out);
+	assert(in.type == out.info.type);
+}
+
 int main()
 {
-	int i;
+	int i, nmb = 1000;
 	srand(time(NULL));
 
-	for(i = 0; i < 1000; ++i) {
+	printf("init_msg: \n");
+	for(i = 0; i < nmb; ++i)
 		test_init();
+	printf(" [OK] %d/%d\n", nmb, i);
+	
+	printf("data_msg: \n");
+	for(i = 0; i < nmb; ++i)
 		test_data();
-		/* TODO test other packets */
-	}
+	printf(" [OK] %d/%d\n", nmb, i);
+
+	printf("info_msg: \n");
+	for(i = 0; i < nmb; ++i)
+		test_info();
+	printf(" [OK] %d/%d\n", nmb, i);
 }
