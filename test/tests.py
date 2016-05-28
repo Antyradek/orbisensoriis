@@ -5,7 +5,7 @@
 
 import getopt
 import os
-import shutil
+from subprocess import Popen, PIPE, DEVNULL
 import sys
 
 # Słownik z danymi pobranymi z pliku konfiguracyjnego
@@ -35,44 +35,34 @@ def test_normal():
 
     print('[*] Spawning ' + str(sensors_no) + ' sensors.')
 
-    fifo_dir = 'tmp_fifo'
-    if os.path.exists(fifo_dir):
-        shutil.rmtree(fifo_dir)
-
-    os.mkdir(fifo_dir)
-
-    fifos = []
+    sensors = []
     for i in range(0, sensors_no):
-        os.mkfifo(fifo_dir + '/fifo' + str(i), 0o777)
-        os.system(sensor_path + ' localhost ' + str(4001 + i) + ' localhost ' + str(4002 + i) + ' ' + str(i) +
-                  ' 1>' + fifo_dir + '/fifo' + str(i) + ' 2>&1 &')
-        fifos.append(open(fifo_dir + '/fifo' + str(i), 'r'))
+        sensors.append(Popen([sensor_path, 'localhost', str(4001 + i), 'localhost', str(4002 + i), str(i)],
+                             stdin=DEVNULL, stdout=PIPE, stderr=DEVNULL))
 
     print('[*] Starting server.')
-    os.mkfifo(fifo_dir + '/server_fifo', 0o777)
-    os.system(server_path + ' -l ' + str(4001 + sensors_no) + ' 1>' + fifo_dir + '/server_fifo 2>&1 &')
-    server_fifo = open(fifo_dir + '/server_fifo')
+    server = Popen([server_path, '-l', str(4001 + sensors_no)], stdin=DEVNULL, stdout=PIPE, stderr=DEVNULL)
 
     for test_no in range(1, 11):
         print('[*] Test: ' + str(test_no))
         measurements = {}
         for i in range(0, sensors_no):
-            line = fifos[i].readline()
-            while 'measurement ' not in line:
-                line = fifos[i].readline()
-            measurements[i] = int(line.split(' ')[-1][:-2])
-        line = server_fifo.readline()
-        while not ('Received' in line and 'measurements' in line):
-            line = server_fifo.readline()
-        received_no = int(line.split(' ')[2])
+            line = sensors[i].stdout.readline()
+            while b'measurement ' not in line:
+                line = sensors[i].stdout.readline()
+            measurements[i] = int(line.split(b' ')[-1][:-2])
+        line = server.stdout.readline()
+        while not (b'Received' in line and b'measurements' in line):
+            line = server.stdout.readline()
+        received_no = int(line.split(b' ')[2])
         if received_no != sensors_no:
             print('[-] Failed: server received ' + str(received_no) + ' measurements, ' +
                   str(sensors_no) + ' expected.')
             continue
         received = {}
         for i in range(0, received_no):
-            line = server_fifo.readline()
-            tokens = line.split(' ')
+            line = server.stdout.readline()
+            tokens = line.split(b' ')
             sensor_no = int(tokens[2])
             received[sensor_no] = int(tokens[4])
 
@@ -86,6 +76,10 @@ def test_normal():
             print('    Data received by server:')
             for key in received:
                 print('    ' + str(key) + ': ' + str(received[key]))
+
+    for p in sensors:
+        p.kill()
+    server.kill()
 
 
 def print_usage():
