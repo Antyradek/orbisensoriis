@@ -31,6 +31,8 @@ struct init_msg {
     uint16_t timeout;
     /** maksymalny czas aktywności czujników */
     uint16_t period;
+    /** ilość czujników w sieci */
+    uint8_t count;
 };
 
 /**
