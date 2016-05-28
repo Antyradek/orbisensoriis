@@ -53,6 +53,7 @@ void send_init_msg()
     msg.init.type = INIT_MSG;
     msg.init.timeout = sensor_timeout;
     msg.init.period = sensor_period;
+
     int buf_len = sizeof(msg.init);
     unsigned char* buf = malloc(buf_len);
     if(pack_msg(&msg, buf, buf_len) < 0)
@@ -384,7 +385,7 @@ void print_usage()
 {
     printf("Usage: server [OPTIONS]\n");
     printf("\t-f NAME:PORT\t\tName and port of a first sensor (localhost:4001 by default)\n");
-    printf("\t-h\t\t\tPrint this message.\n");
+    printf("\t-h\t\t\tkjPrint this message.\n");
     printf("\t-l PORT\t\t\tPort on which server will listen for data from a last sensor (4444 by default)\n");
     printf("\t-p PERIOD\t\tSensor's period in ms (1000 by default).\n");
     printf("\t-t TIMEOUT\t\tSensor's timeout in ms (1000 by default).\n");
@@ -452,18 +453,21 @@ int main(int argc, char *argv[])
     {
         return -1;
     }
+
     initilize_sockaddr();
     if(bind(sock_last, (struct sockaddr*) &last_addr, sizeof(last_addr)) < 0)
     {
         print_error("Failed to bind socket");
         return -1;
     }
+
     print_success("Server launched");
     if(initialize_thread() < 0)
     {
         print_error("Failed to init thread");
         return -1;
     }
+
     last_loop();
     pthread_join(first_thread, NULL);
     return 0;

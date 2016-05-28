@@ -14,8 +14,10 @@ function orbisensoriis_proto.dissector(buffer,pinfo,tree)
         pinfo.cols.info:append(" INIT_MSG")
         local timeout = buffer(0,4):bitfield(3, 14)
         local period = buffer(0,4):bitfield(17, 14)
+
         subtree:add(buffer(0,1),"timeout: " .. timeout)
         subtree:add(buffer(0,1),"period: " .. period)
+
     elseif msg_type == 2 then 
         subtree:add(buffer(0,1),"DATA_MSG")
         pinfo.cols.info:append(" DATA_MSG")

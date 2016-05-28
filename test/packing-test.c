@@ -13,7 +13,6 @@
 
 #define MAX14 0x3fff
 #define MAX13 0x1fff
-#define MAX8 0xff
 
 void test_init() {
 	struct init_msg in = {INIT_MSG, 0x0001, 0x0001, 0x0001};
@@ -22,7 +21,6 @@ void test_init() {
 
 	in.timeout = rand() % MAX14;
 	in.period = rand() % MAX14;
-	in.count = rand() % MAX8;
 
 	pack_msg(&in, buf, 32);
 	unpack_msg(buf, &out);
@@ -30,7 +28,6 @@ void test_init() {
 	assert(in.type == out.init.type);
 	assert(in.period == out.init.period);
 	assert(in.timeout == out.init.timeout);
-	assert(in.count == out.init.count);
 }
 
 void test_data() {

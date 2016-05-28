@@ -30,7 +30,6 @@ static int pack_init_msg(struct init_msg *msg, unsigned char *dst, int n)
     dst[2] = ((timeout & 0x0004) << 5)
         | ((period & 0xfe00) >> 9);
     dst[3] = ((period & 0x01fc) >> 1);
-    dst[4] = msg->count;
 
     return 4;
 }
@@ -55,7 +54,7 @@ static int unpack_init_msg(unsigned char *src, struct init_msg *dst)
 
     dst->timeout = timeout >> 2;
     dst->period = period >> 2;
-    dst->count = src[4];
+    
     return dst->type;
 }
 
