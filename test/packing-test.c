@@ -7,7 +7,7 @@
 #define MAX14 0x3fff
 #define MAX13 0x1fff
 
-int test_init() {
+void test_init() {
 	struct init_msg in = {INIT_MSG, 0x0001, 0x0001};
 	union msg out;
 	unsigned char buf[32];
@@ -23,7 +23,7 @@ int test_init() {
 	assert(in.timeout == out.init.timeout);
 }
 
-int test_data() {
+void test_data() {
 	struct data_msg in;
 	union msg out;
 	unsigned char buf[MAX13];
