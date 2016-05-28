@@ -28,7 +28,7 @@
 #define SENSOR_PERIOD 1000 //ms
 #define SENSOR_TIMEOUT 1000 //ms
 #define SERVER_TIMEOUT 1000 //ms
-#define ERROR_TIMEOUT 1000 //ms
+#define ERROR_TIMEOUT 3000 //ms
 
 int resolving_error = 0;
 int mode = RING;
@@ -36,7 +36,7 @@ int close_first = 0;
 int sock_first, sock_last;
 pthread_t first_thread;
 struct sockaddr_in first_addr, last_addr;
-struct timeval timeout;
+struct timeval timeout, error_timeout;
 
 // Sends initializing message to sensors
 void send_init_msg()
@@ -170,6 +170,17 @@ int receive_ack_and_finit(int num)
         addr = last_addr;
         nums = "last";
     }
+
+
+    if(setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &error_timeout, sizeof(struct timeval)) < 0)
+    {
+        print_error("Failed to set error timeout");
+    }
+    else
+    {
+        print_success("Error timeout set");
+    }
+
     unsigned char buf[MAX_DATA];
     unsigned addr_len = sizeof(addr);
     print_info("Waiting for ack from %d...", num);
@@ -196,6 +207,14 @@ int receive_ack_and_finit(int num)
         return -1;
     }
     print_success("Received finit msg from %d", num);
+    if(setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(struct timeval)) < 0)
+    {
+        print_error("Failed to return to normal timeout");
+    }
+    else
+    {
+        print_success("Returned to normal timeout");
+    }
     return 0;
 }
 
@@ -305,8 +324,11 @@ int initialize_sockets()
         print_error("Failed to create socket");
         return -1;
     }
-    timeout.tv_usec = ERROR_TIMEOUT%1000;
-    timeout.tv_sec = ERROR_TIMEOUT/1000;
+    timeout.tv_usec = SERVER_TIMEOUT%1000;
+    timeout.tv_sec = SERVER_TIMEOUT/1000;
+
+    error_timeout.tv_usec = ERROR_TIMEOUT%1000;
+    error_timeout.tv_sec = ERROR_TIMEOUT/1000;
     if(setsockopt(sock_first, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(struct timeval)) < 0)
     {
         print_error("Failed to setsockopt %s", strerror(errno));
