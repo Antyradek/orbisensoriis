@@ -154,13 +154,13 @@ int pack_msg(void *msg, unsigned char *dst, int n)
     header = msg;
     switch (header->type) {
         case INIT_MSG:
-        case RECONF_MSG:
             return pack_init_msg(msg, dst, n);
         case DATA_MSG:
             return pack_data_msg(msg, dst, n);
         case ERR_MSG:
         case ACK_MSG:
         case FINIT_MSG:
+        case RECONF_MSG:
             return pack_info_msg(msg, dst, n);
         default:
             return -ENOTSUP;
