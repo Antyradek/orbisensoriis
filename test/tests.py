@@ -7,14 +7,17 @@ import getopt
 import os
 from subprocess import Popen, PIPE, DEVNULL
 import sys
+import time
 
 # Słownik z danymi pobranymi z pliku konfiguracyjnego
 config = {}
 
 
-def test_normal():
-    print('[*] Testing normal work of a network.')
-
+def setup():
+    """
+    Uruchamia podaną w pliku konfiguracyjnym lub za pomocą opcji -n liczbę sensorów oraz serwer
+    :return: (lista sensorów, server)
+    """
     try:
         sensors_no = int(config['SENSORS_NO'])
     except KeyError:
@@ -43,10 +46,18 @@ def test_normal():
     print('[*] Starting server.')
     server = Popen([server_path, '-l', str(4001 + sensors_no)], stdin=DEVNULL, stdout=PIPE, stderr=DEVNULL)
 
+    return sensors, server
+
+
+def test_normal():
+    print('[*] Testing normal work of a network.')
+
+    sensors, server = setup()
+
     for test_no in range(1, 11):
         print('[*] Test: ' + str(test_no))
         measurements = {}
-        for i in range(0, sensors_no):
+        for i in range(0, len(sensors)):
             line = sensors[i].stdout.readline()
             while b'measurement ' not in line:
                 line = sensors[i].stdout.readline()
@@ -55,9 +66,9 @@ def test_normal():
         while not (b'Received' in line and b'measurements' in line):
             line = server.stdout.readline()
         received_no = int(line.split(b' ')[2])
-        if received_no != sensors_no:
+        if received_no != len(sensors):
             print('[-] Failed: server received ' + str(received_no) + ' measurements, ' +
-                  str(sensors_no) + ' expected.')
+                  str(len(sensors)) + ' expected.')
             continue
         received = {}
         for i in range(0, received_no):
@@ -68,6 +79,12 @@ def test_normal():
 
         if received == measurements:
             print('[+] Success!')
+            print('    Data from sensors:')
+            for key in measurements:
+                print('    ' + str(key) + ': ' + str(measurements[key]))
+            print('    Data received by server:')
+            for key in received:
+                print('    ' + str(key) + ': ' + str(received[key]))
         else:
             print('[-] Failed!')
             print('    Data from sensors:')
@@ -78,6 +95,70 @@ def test_normal():
                 print('    ' + str(key) + ': ' + str(received[key]))
 
     for p in sensors:
+        p.kill()
+    server.kill()
+
+
+def test_emergency():
+    print('[*] Testing emergency mode.')
+
+    sensors, server = setup()
+
+    print('[*] Killing first sensor...')
+    time.sleep(2)
+    sensors[0].kill()
+
+    # Czytamy dane z okresu normalnego działania sieci
+    for p in sensors[1:]:
+        line = p.stdout.readline()
+        while b'ACK_MSG' not in line:
+            line = p.stdout.readline()
+
+    line = server.stdout.readline()
+    while b'double-list' not in line:
+        line = server.stdout.readline()
+
+    for test_no in range(1, 11):
+        print('[*] Test: ' + str(test_no))
+        measurements = {}
+        for i in range(1, len(sensors)):
+            line = sensors[i].stdout.readline()
+            while b'measurement ' not in line:
+                line = sensors[i].stdout.readline()
+            measurements[i] = int(line.split(b' ')[-1][:-2])
+        line = server.stdout.readline()
+        while not (b'Received' in line and b'measurements' in line):
+            line = server.stdout.readline()
+        received_no = int(line.split(b' ')[2])
+        if received_no != len(sensors) - 1:
+            print('[-] Failed: server received ' + str(received_no) + ' measurements, ' +
+                  str(len(sensors)) + ' expected.')
+            continue
+        received = {}
+        for i in range(0, received_no):
+            line = server.stdout.readline()
+            tokens = line.split(b' ')
+            sensor_no = int(tokens[2])
+            received[sensor_no] = int(tokens[4])
+
+        if received == measurements:
+            print('[+] Success!')
+            print('    Data from sensors:')
+            for key in measurements:
+                print('    ' + str(key) + ': ' + str(measurements[key]))
+            print('    Data received by server:')
+            for key in received:
+                print('    ' + str(key) + ': ' + str(received[key]))
+        else:
+            print('[-] Failed!')
+            print('    Data from sensors:')
+            for key in measurements:
+                print('    ' + str(key) + ': ' + str(measurements[key]))
+            print('    Data received by server:')
+            for key in received:
+                print('    ' + str(key) + ': ' + str(received[key]))
+
+    for p in sensors[1:]:
         p.kill()
     server.kill()
 
@@ -99,9 +180,10 @@ def parse_config(file_name):
             config[tokens[0]] = tokens[1]
 
 
-# Słownik z trybami testowania
+# Mapowanie nazwy trybu testowania na funkcje testującą
 test_modes = {
     'normal': test_normal,
+    'emergency': test_emergency
 }
 
 
