@@ -122,7 +122,7 @@ void send_data_msg(int num)
     unsigned first_len = sizeof(addr);
     if(sendto(sockfd, buf, buf_len, 0, (struct sockaddr* )&addr, first_len) < 0)
     {
-        print_error("Failed to send data msg");
+        print_error("Failed to send data msg to %d", num);
         exit(-1);
     }
     print_info("Data message sent to %s sensor", nums);
@@ -319,6 +319,8 @@ void* first_loop(void* arg)
     send_init_msg();
     while(1)
     {
+        if(close_first)
+            return NULL;
         if(mode == RECONF)
         {
             sleep(1);
@@ -332,8 +334,6 @@ void* first_loop(void* arg)
         send_data_msg(FIRST);
         if(mode == DOUBLE_LIST)
         {
-            if(close_first)
-                return NULL;
             print_info("Waiting for data from first...");
             unsigned char buf[MAX_DATA];
             unsigned first_addr_len = sizeof(first_addr);
