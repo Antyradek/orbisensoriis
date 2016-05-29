@@ -13,6 +13,7 @@
 #include <unistd.h>
 #include <sys/time.h>
 #include <errno.h>
+#include <sys/un.h>
 
 #include "../protocol.h"
 #include "../helper.h"
@@ -21,6 +22,7 @@
 #define FIRST_NAME_MAX_LEN 128
 #define RING 0
 #define DOUBLE_LIST 1
+#define RECONF 3
 #define DEF_PORT_FIRST 4001
 #define DEF_PORT_LAST 4444
 #define MAX_DATA 256
@@ -35,7 +37,7 @@ int resolving_error = 0;
 int mode = RING;
 int close_first = 0;
 int sock_first, sock_last;
-pthread_t first_thread;
+pthread_t first_thread, reconf_thread;
 struct sockaddr_in first_addr, last_addr;
 struct timeval timeout, error_timeout;
 
@@ -68,6 +70,29 @@ void send_init_msg()
         exit(-1);
     }
     print_info("Init message sent");
+    free(buf);
+}
+
+// Sends reconf message to sensors
+void send_reconf_msg()
+{
+    union msg msg;
+    msg.info.type = RECONF_MSG;
+
+    int buf_len = sizeof(msg.info);
+    unsigned char* buf = malloc(buf_len);
+    if(pack_msg(&msg, buf, buf_len) < 0)
+    {
+        print_error("Failed to pack reconf msg");
+        exit(-1);
+    }
+    unsigned first_len = sizeof(first_addr);
+    if(sendto(sock_first, buf, buf_len, 0, (struct sockaddr* )&first_addr, first_len) < 0)
+    {
+        print_error("Failed to send reconf msg");
+        exit(-1);
+    }
+    print_info("Reconf message sent");
     free(buf);
 }
 
@@ -227,6 +252,66 @@ int receive_ack_and_finit(int num)
     return 0;
 }
 
+// Thread for receving reconf
+void* reconf_fun(void* arg)
+{
+    int sockfd = socket(AF_UNIX, SOCK_STREAM, 0);
+    struct sockaddr_un addr;
+    addr.sun_family = AF_UNIX;
+    strcpy(addr.sun_path, "reconf_socket");
+    unlink("reconf_socket");
+    if(bind(sockfd, (struct sockaddr*)&addr, sizeof(addr)) < 0)
+    {
+        print_error("Failed to create unix socket, %s %d\n", strerror(errno), errno);
+    }
+    print_success("Created socket");
+
+    int sock;
+    if (listen(sockfd, 5) < 0)
+        print_error("Failed to listen on unix socket\n");
+    if ((sock = accept(sockfd, NULL, NULL)) < 0)
+        print_error("Failed to accept unix socket\n");
+    else
+        print_success("Unix socket accepted");
+
+    char buf[1] = {' '};
+    while(1)
+    {
+        if(read(sock, buf, sizeof(buf)) > 0)
+        {
+            if(buf[0] == 'r' && mode == RING)
+            {
+                //print_info("I got reconf!!\n");
+                mode = RECONF;
+                send_reconf_msg();
+                while(1)
+                {
+                    //print_info("Waiting for reconf to come back\n");
+                    unsigned char buf[MAX_DATA];
+                    unsigned last_addr_len = sizeof(last_addr);
+                    int len = recvfrom(sock_last, buf, MAX_DATA, 0, (struct sockaddr*)&last_addr, &last_addr_len);
+                    if(len < 1)
+                        continue;
+                    union msg received_msg;
+                    int msg_type = unpack_msg(buf, &received_msg);
+                    //print_info("Got message %d\n", msg_type);
+                    if(msg_type == RECONF_MSG)
+                        break;
+                }
+                print_success("Now you can reconfigure network!");
+            }
+            else if(buf[0] == 'i' && mode == RECONF)
+            {
+                send_init_msg();
+                mode = RING;
+            }
+        }
+        else
+            sleep(1);
+    }
+    return NULL;
+}
+
 // Loop for communication with first sensor
 void* first_loop(void* arg)
 {
@@ -234,6 +319,11 @@ void* first_loop(void* arg)
     send_init_msg();
     while(1)
     {
+        if(mode == RECONF)
+        {
+            sleep(1);
+            continue;
+        }
         if(resolving_error)
         {
             usleep(SERVER_TIMEOUT*1000);
@@ -271,6 +361,11 @@ void last_loop()
     print_info("Last loop");
     while(1)
     {
+        if(mode == RECONF)
+        {
+            sleep(1);
+            continue;
+        }
         print_info("Waiting for data from last...");
         unsigned char buf[MAX_DATA];
         unsigned last_addr_len = sizeof(last_addr);
@@ -468,6 +563,10 @@ int main(int argc, char *argv[])
         return -1;
     }
 
+    if(pthread_create(&reconf_thread, NULL, reconf_fun, NULL) != 0)
+    {
+        return -1;
+    }
     last_loop();
     pthread_join(first_thread, NULL);
     return 0;
