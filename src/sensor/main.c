@@ -492,7 +492,11 @@ static void action()
                 }
                 else if(msg_id == RECONF_MSG)
                 {
-                    print_info("Switched to Reconfigation mode.");
+                    //przesyłamy dalej do skutku
+                    print_info("Received RECONF_MSG, sending to next sensor...");
+                    while(send_msg(NEXT, &received_msg) != 0);
+                    print_success("Sent RECONF_MSG to next sensor.");
+                    print_info("Switched to Reconfiguration mode.");
                     state = INITIALIZING;
                     continue;
                 }

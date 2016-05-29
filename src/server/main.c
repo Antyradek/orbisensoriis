@@ -498,15 +498,15 @@ int main(int argc, char *argv[])
     sensor_timeout = DEF_SENSOR_TIMEOUT;
     sensor_period = DEF_SENSOR_PERIOD;
 
-    while ((option = getopt(argc, argv,"f:hl:p:t:")) != -1) 
+    while ((option = getopt(argc, argv,"f:hl:p:t:")) != -1)
     {
-        switch (option) 
+        switch (option)
         {
             case 'f':
             {
                 unsigned int name_len;
                 char* str = strstr(optarg, ":");
-                if (str == NULL) 
+                if (str == NULL)
                 {
                     printf("Invalid argument for -f flag!\n");
                     print_usage();
@@ -525,21 +525,21 @@ int main(int argc, char *argv[])
 
                 port_first = atoi(++str);
                 break;
-            }         
-            case 'h':   
+            }
+            case 'h':
                 print_usage();
                 exit(0);
-            case 'l': 
-                port_last = atoi(optarg); 
+            case 'l':
+                port_last = atoi(optarg);
                 break;
-            case 'p':  
+            case 'p':
                 sensor_period = atoi(optarg);
                 break;
             case 't':
                 sensor_timeout = atoi(optarg);
                 break;
-            default: 
-                print_usage(); 
+            default:
+                print_usage();
                 exit(1);
         }
     }
