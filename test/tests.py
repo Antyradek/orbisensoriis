@@ -67,8 +67,8 @@ def test_normal():
             line = server.stdout.readline()
         received_no = int(line.split(b' ')[2])
         if received_no != len(sensors):
-            print('[-] Failed: server received ' + str(received_no) + ' measurements, ' +
-                  str(len(sensors)) + ' expected.')
+            print('\033[-] Failed: server received ' + str(received_no) + ' measurements, ' +
+                  str(len(sensors)) + ' expected.\033[39m')
             continue
         received = {}
         for i in range(0, received_no):
@@ -78,7 +78,7 @@ def test_normal():
             received[sensor_no] = int(tokens[4])
 
         if received == measurements:
-            print('[+] Success!')
+            print('\033[32m[+] Success!\033[39m')
             print('    Data from sensors:')
             for key in measurements:
                 print('    ' + str(key) + ': ' + str(measurements[key]))
@@ -86,7 +86,7 @@ def test_normal():
             for key in received:
                 print('    ' + str(key) + ': ' + str(received[key]))
         else:
-            print('[-] Failed!')
+            print('\033[31m[-] Failed!\033[39m')
             print('    Data from sensors:')
             for key in measurements:
                 print('    ' + str(key) + ': ' + str(measurements[key]))
@@ -104,7 +104,7 @@ def test_emergency():
 
     sensors, server = setup()
 
-    print('[*] Killing first sensor...')
+    print('[*] Killing first sensor... (it may take a while)')
     time.sleep(2)
     sensors[0].kill()
 
@@ -131,8 +131,8 @@ def test_emergency():
             line = server.stdout.readline()
         received_no = int(line.split(b' ')[2])
         if received_no != len(sensors) - 1:
-            print('[-] Failed: server received ' + str(received_no) + ' measurements, ' +
-                  str(len(sensors)) + ' expected.')
+            print('\033[31m[-] Failed: server received ' + str(received_no) + ' measurements, ' +
+                  str(len(sensors) - 1) + ' expected.\033[39m')
             continue
         received = {}
         for i in range(0, received_no):
@@ -142,7 +142,7 @@ def test_emergency():
             received[sensor_no] = int(tokens[4])
 
         if received == measurements:
-            print('[+] Success!')
+            print('\033[32m[+] Success!\033[39m')
             print('    Data from sensors:')
             for key in measurements:
                 print('    ' + str(key) + ': ' + str(measurements[key]))
@@ -150,7 +150,7 @@ def test_emergency():
             for key in received:
                 print('    ' + str(key) + ': ' + str(received[key]))
         else:
-            print('[-] Failed!')
+            print('\033[31m[-] Failed!\033[39m')
             print('    Data from sensors:')
             for key in measurements:
                 print('    ' + str(key) + ': ' + str(measurements[key]))
@@ -160,6 +160,149 @@ def test_emergency():
 
     for p in sensors[1:]:
         p.kill()
+    server.kill()
+
+    sensors, server = setup()
+
+    print('[*] Killing last sensor... (it may take a while)')
+    time.sleep(2)
+    sensors[-1].kill()
+
+    # Czytamy dane z okresu normalnego działania sieci
+    for p in sensors[:-1]:
+        line = p.stdout.readline()
+        while b'ACK_MSG' not in line:
+            line = p.stdout.readline()
+
+    line = server.stdout.readline()
+    while b'double-list' not in line:
+        line = server.stdout.readline()
+
+    for test_no in range(1, 11):
+        print('[*] Test: ' + str(test_no))
+        measurements = {}
+        for i in range(0, len(sensors) - 1):
+            line = sensors[i].stdout.readline()
+            while b'measurement ' not in line:
+                line = sensors[i].stdout.readline()
+            measurements[i] = int(line.split(b' ')[-1][:-2])
+        line = server.stdout.readline()
+        while not (b'Received' in line and b'measurements' in line):
+            line = server.stdout.readline()
+        received_no = int(line.split(b' ')[2])
+        if received_no != len(sensors) - 1:
+            print('\033[31m[-] Failed: server received ' + str(received_no) + ' measurements, ' +
+                  str(len(sensors) - 1) + ' expected.\033[39m')
+            continue
+        received = {}
+        for i in range(0, received_no):
+            line = server.stdout.readline()
+            tokens = line.split(b' ')
+            sensor_no = int(tokens[2])
+            received[sensor_no] = int(tokens[4])
+
+        if received == measurements:
+            print('\033[32m[+] Success!\033[39m')
+            print('    Data from sensors:')
+            for key in measurements:
+                print('    ' + str(key) + ': ' + str(measurements[key]))
+            print('    Data received by server:')
+            for key in received:
+                print('    ' + str(key) + ': ' + str(received[key]))
+        else:
+            print('\033[31m[-] Failed!\033[39m')
+            print('    Data from sensors:')
+            for key in measurements:
+                print('    ' + str(key) + ': ' + str(measurements[key]))
+            print('    Data received by server:')
+            for key in received:
+                print('    ' + str(key) + ': ' + str(received[key]))
+
+    for p in sensors[:-1]:
+        p.kill()
+    server.kill()
+
+    if len(sensors) <= 2:
+        return
+
+    sensors, server = setup()
+
+    print('[*] Killing middle sensor... (it may take a while)')
+    killed_sensor_no = len(sensors) // 2
+    time.sleep(2)
+    sensors[killed_sensor_no].kill()
+
+    # Czytamy dane z okresu normalnego działania sieci
+    for i in range(0, len(sensors)):
+        if i == killed_sensor_no:
+            continue
+        line = sensors[i].stdout.readline()
+        while b'ACK_MSG' not in line:
+            line = sensors[i].stdout.readline()
+
+    line = server.stdout.readline()
+    while b'double-list' not in line:
+        line = server.stdout.readline()
+
+    for test_no in range(1, 11):
+        print('[*] Test: ' + str(test_no))
+        measurements = {}
+        for i in range(0, len(sensors)):
+            if i == killed_sensor_no:
+                continue
+            line = sensors[i].stdout.readline()
+            while b'measurement ' not in line:
+                line = sensors[i].stdout.readline()
+            measurements[i] = int(line.split(b' ')[-1][:-2])
+
+        # Musimy uwzględnić fakt, że dane mogą zostać wypisane w dowolnej kolejności
+        line = server.stdout.readline()
+        while not (b'Received' in line and b'measurements' in line):
+            line = server.stdout.readline()
+
+        received_no = int(line.split(b' ')[2])
+
+        line = server.stdout.readline()
+        received = {}
+        while not (b'Received' in line and b'measurements' in line):
+            if b'Sensor' in line and b'Data' in line:
+                tokens = line.split(b' ')
+                received[int(tokens[2])] = int(tokens[4])
+            line = server.stdout.readline()
+        received_no += int(line.split(b' ')[2])
+
+        if received_no != len(sensors) - 1:
+            print('\033[31m[-] Failed: server received ' + str(received_no) + ' measurements, ' +
+                  str(len(sensors) - 1) + ' expected.\033[39m')
+            continue
+
+        while len(received) != received_no:
+            line = server.stdout.readline()
+            if b'Sensor' in line and b'Data' in line:
+                tokens = line.split(b' ')
+                received[int(tokens[2])] = int(tokens[4])
+
+        if received == measurements:
+            print('\033[32m[+] Success!\033[39m')
+            print('    Data from sensors:')
+            for key in measurements:
+                print('    ' + str(key) + ': ' + str(measurements[key]))
+            print('    Data received by server:')
+            for key in received:
+                print('    ' + str(key) + ': ' + str(received[key]))
+        else:
+            print('\033[31m[-] Failed!\033[39m')
+            print('    Data from sensors:')
+            for key in measurements:
+                print('    ' + str(key) + ': ' + str(measurements[key]))
+            print('    Data received by server:')
+            for key in received:
+                print('    ' + str(key) + ': ' + str(received[key]))
+
+    for i in range(0, len(sensors)):
+        if i == killed_sensor_no:
+            continue
+        sensors[i].kill()
     server.kill()
 
 
