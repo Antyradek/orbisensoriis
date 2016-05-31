@@ -18,13 +18,9 @@
 #include "../protocol.h"
 #include "../helper.h"
 
-#define DEF_FIRST_NAME "localhost"
-#define FIRST_NAME_MAX_LEN 128
 #define RING 0
 #define DOUBLE_LIST 1
 #define RECONF 3
-#define DEF_PORT_FIRST 4001
-#define DEF_PORT_LAST 4444
 #define MAX_DATA 256
 #define FIRST 1
 #define LAST -1
@@ -41,7 +37,7 @@ pthread_t first_thread, reconf_thread;
 struct sockaddr_in first_addr, last_addr;
 struct timeval timeout, error_timeout;
 
-char first_name[FIRST_NAME_MAX_LEN];
+char* first_name;
 unsigned short port_first;
 unsigned short port_last;
 unsigned short sensor_period;
@@ -476,73 +472,19 @@ int initialize_thread()
     return 0;
 }
 
-void print_usage()
-{
-    printf("Usage: server [OPTIONS]\n");
-    printf("\t-f NAME:PORT\t\tName and port of a first sensor (localhost:4001 by default)\n");
-    printf("\t-h\t\t\tPrint this message.\n");
-    printf("\t-l PORT\t\t\tPort on which server will listen for data from a last sensor (4444 by default)\n");
-    printf("\t-p PERIOD\t\tSensor's period in ms (1000 by default).\n");
-    printf("\t-t TIMEOUT\t\tSensor's timeout in ms (1000 by default).\n");
-}
-
 int main(int argc, char *argv[])
 {
-    int option;
     print_init();
+    if(argc < 4)
+    {
+        printf("Usage: server [first addr] [first port] [last port]\n");
+    }
 
-    // Przypisywanie wartości domyślnych
-    port_first = DEF_PORT_FIRST;
-    strncpy(first_name, "localhost", strlen("localhost"));
-    port_last = DEF_PORT_LAST;
+    first_name = argv[1];
+    port_first = atoi(argv[2]);
+    port_last = atoi(argv[3]);
     sensor_timeout = DEF_SENSOR_TIMEOUT;
     sensor_period = DEF_SENSOR_PERIOD;
-
-    while ((option = getopt(argc, argv,"f:hl:p:t:")) != -1)
-    {
-        switch (option)
-        {
-            case 'f':
-            {
-                unsigned int name_len;
-                char* str = strstr(optarg, ":");
-                if (str == NULL)
-                {
-                    printf("Invalid argument for -f flag!\n");
-                    print_usage();
-                    exit(1);
-                }
-
-                name_len = str - optarg;
-                if (name_len >= 1024)
-                {
-                    print_error("Firt sensor name too long!\n");
-                    exit(1);
-                }
-
-                strncpy(first_name, optarg, name_len);
-                first_name[name_len] = '\0';
-
-                port_first = atoi(++str);
-                break;
-            }
-            case 'h':
-                print_usage();
-                exit(0);
-            case 'l':
-                port_last = atoi(optarg);
-                break;
-            case 'p':
-                sensor_period = atoi(optarg);
-                break;
-            case 't':
-                sensor_timeout = atoi(optarg);
-                break;
-            default:
-                print_usage();
-                exit(1);
-        }
-    }
 
     if(initialize_sockets() < 0)
     {
